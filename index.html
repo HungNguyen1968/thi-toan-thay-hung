@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thi Toán Online</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{
+  --paper:#F4F7FB; --grid:#E2E9F2; --surface:#FFFFFF; --ink:#15213B; --muted:#5A6781; --line:#CAD4E2;
+  --pen:#2146C7; --pen-ink:#FFFFFF; --pen-soft:#E7EDFC; --fill:#272B33; --fill-ink:#FFFFFF;
+  --red:#C23430; --red-soft:#FCEBEA; --green:#157A4B; --green-soft:#E5F4EC; --amber-soft:#FFF5D9; --amber-line:#E6CF86;
+  --font:"Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0F141D; --grid:#172030; --surface:#161D29; --ink:#E4E9F2; --muted:#98A4BA; --line:#2B3647;
+    --pen:#86A2FF; --pen-ink:#0F1A3D; --pen-soft:#1D2842; --fill:#DCE3EE; --fill-ink:#141A24;
+    --red:#FF8078; --red-soft:#3A1E1E; --green:#55C990; --green-soft:#16301F; --amber-soft:#322A14; --amber-line:#5E4F23;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0F141D; --grid:#172030; --surface:#161D29; --ink:#E4E9F2; --muted:#98A4BA; --line:#2B3647;
+  --pen:#86A2FF; --pen-ink:#0F1A3D; --pen-soft:#1D2842; --fill:#DCE3EE; --fill-ink:#141A24;
+  --red:#FF8078; --red-soft:#3A1E1E; --green:#55C990; --green-soft:#16301F; --amber-soft:#322A14; --amber-line:#5E4F23;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  font-family:var(--font); color:var(--ink); background-color:var(--paper);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:24px 24px; line-height:1.55; font-size:16px; min-height:100vh; overflow-x:hidden;
+}
+button,input,select{font:inherit;color:inherit}
+img{max-width:100%}
+:focus-visible{outline:3px solid var(--pen);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+h1{font-size:clamp(30px,5vw,48px);line-height:1.08;letter-spacing:-.025em;margin:28px 0 12px;font-weight:800}
+h2{font-size:22px;line-height:1.25;margin:0 0 16px;letter-spacing:-.01em;font-weight:700}
+h3{font-size:18px;margin:28px 0 10px;font-weight:700}
+p{margin:0 0 12px}
+.wrap{max-width:1120px;margin:0 auto;padding:8px 20px 72px}
+.wrap.narrow{max-width:640px}
+.wrap.mid{max-width:860px}
+.lede{color:var(--muted);max-width:62ch;font-size:17px}
+.hint{color:var(--muted);font-size:14px;display:block}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row.nowrap{flex-wrap:nowrap}
+.row.end{justify-content:flex-end}
+.row.between{justify-content:space-between}
+.spacer{flex:1}
+.error{color:var(--red);font-size:14px;min-height:0}
+.error:empty{display:none}
+.notice{padding:12px 14px;border-radius:8px;background:var(--amber-soft);border:1px solid var(--amber-line);font-size:15px;margin:12px 0}
+.notice.bad{background:var(--red-soft);border-color:var(--red);color:var(--ink)}
+.empty{padding:28px 20px;color:var(--muted);border:1.5px dashed var(--line);border-radius:10px;background:color-mix(in srgb,var(--surface) 80%,transparent)}
+
+/* top bar */
+.topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 20px;background:var(--surface);border-bottom:2px solid var(--ink);min-height:58px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;letter-spacing:-.01em;min-width:0}
+.brand-t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand-mark{width:22px;height:22px;border-radius:50%;flex:none;background:radial-gradient(circle at 35% 30%,color-mix(in srgb,var(--fill) 70%,#888),var(--fill) 70%);border:2px solid var(--fill)}
+.role-chip{font-size:14px;font-weight:600;padding:3px 10px;border-radius:99px;background:var(--pen-soft);color:var(--pen);white-space:nowrap}
+.xbar{display:flex;align-items:center;gap:14px;flex-wrap:nowrap;min-width:0}
+.xwho{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+.xvio{font-size:14px;white-space:nowrap}
+.xvio.bad{color:var(--red);font-weight:700}
+.timer{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.01em;min-width:72px;text-align:right}
+.timer.low{color:var(--red)}
+
+/* buttons & inputs */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:8px;border:1.5px solid var(--ink);background:var(--surface);padding:9px 16px;font-weight:600;cursor:pointer;line-height:1.2;text-align:center;white-space:nowrap}
+.btn:hover{background:var(--pen-soft)}
+.btn.primary{background:var(--pen);border-color:var(--pen);color:var(--pen-ink)}
+.btn.primary:hover{background:color-mix(in srgb,var(--pen) 85%,var(--ink))}
+.btn.danger{color:var(--red);border-color:var(--red)}
+.btn.danger:hover{background:var(--red-soft)}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn.ghost:hover{background:var(--pen-soft)}
+.btn.small{padding:5px 10px;font-size:14px}
+.btn.big{padding:13px 24px;font-size:17px}
+.btn.wide{width:100%}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.linkbtn{background:none;border:0;padding:0;color:var(--pen);font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.field{display:flex;flex-direction:column;gap:6px;font-weight:600;font-size:14px;min-width:0}
+.field .hint{font-weight:400}
+.req{color:var(--red)}
+.input{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;background:var(--surface);font-weight:500;font-size:16px;min-width:0}
+.input:focus{border-color:var(--pen);outline:none;box-shadow:0 0 0 3px var(--pen-soft)}
+select.input{cursor:pointer}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px 20px}
+.form-grid.two{grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin:18px 0 8px}
+.checks{display:grid;gap:10px;margin:20px 0 4px}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:15px;cursor:pointer}
+.check input{width:18px;height:18px;margin:2px 0 0;accent-color:var(--pen);flex:none}
+.score-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px 16px}
+.filebox{position:relative;display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px dashed var(--pen);border-radius:8px;background:var(--surface);cursor:pointer;font-weight:500;min-height:46px}
+.filebox:hover{background:var(--pen-soft)}
+.filebox:focus-within{outline:3px solid var(--pen);outline-offset:2px}
+.filebox input{position:absolute;opacity:0;width:1px;height:1px}
+.filebox .fname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.filebox .fbtn{flex:none;padding:3px 10px;border-radius:6px;background:var(--pen);color:var(--pen-ink);font-size:14px;font-weight:600}
+
+/* home */
+.hero{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:40px;align-items:center;padding-top:28px}
+.hero h1{margin-top:0}
+.roles{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:8px}
+.role{display:flex;align-items:center;gap:16px;text-align:left;padding:18px;border-radius:12px;border:2px solid var(--ink);background:var(--surface);cursor:pointer}
+.role strong{display:block;font-size:19px}
+.role-bubble{flex:none;width:58px;height:58px;border-radius:50%;border:2px solid var(--ink);display:grid;place-items:center;font-weight:800;font-size:18px;transition:background .15s,color .15s}
+.role:hover .role-bubble,.role:focus-visible .role-bubble{background:var(--fill);color:var(--fill-ink);border-color:var(--fill)}
+.pick-h{margin-top:28px}
+.deco{justify-self:end;background:var(--surface);border:2px solid var(--ink);border-radius:12px;padding:18px 22px;transform:rotate(1.5deg)}
+.deco-h{font-size:13px;color:var(--muted);margin-bottom:8px;border-bottom:1px solid var(--line);padding-bottom:6px}
+.drow{display:flex;align-items:center;gap:10px;padding:5px 0}
+.dn{width:22px;text-align:right;font-weight:700;font-size:14px;font-variant-numeric:tabular-nums}
+.db{width:30px;height:30px;border-radius:50%;border:1.5px solid var(--ink);display:grid;place-items:center;font-size:13px;font-weight:600}
+.db.f{background:var(--fill);color:var(--fill-ink);border-color:var(--fill)}
+
+/* teacher */
+.subtabs{display:flex;gap:4px;border-bottom:2px solid var(--ink);margin:24px 0 20px;overflow-x:auto}
+.subtab{background:none;border:0;padding:10px 16px;font-weight:600;color:var(--muted);cursor:pointer;border-radius:8px 8px 0 0;white-space:nowrap;margin-bottom:-2px;border-bottom:3px solid transparent}
+.subtab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--pen)}
+.subtab:hover{color:var(--ink)}
+.block{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:22px;margin-bottom:18px}
+.count-badge{display:inline-grid;place-items:center;min-width:28px;height:28px;padding:0 8px;border-radius:99px;background:var(--fill);color:var(--fill-ink);font-size:14px;vertical-align:2px;margin-left:6px}
+.qrow{display:grid;grid-template-columns:70px 150px 170px minmax(0,1fr) minmax(0,1fr) auto;gap:14px;align-items:start;padding:14px 0;border-top:1px solid var(--line)}
+.qrow:first-child{border-top:0}
+.qrow-num{font-weight:800;font-size:17px;padding-top:28px}
+.qrow .btn.danger{margin-top:26px}
+.slot{display:flex;gap:6px;align-items:center;flex-wrap:wrap;min-height:44px}
+.thumb{height:44px;max-width:140px;object-fit:contain;border:1px solid var(--line);border-radius:4px;background:#fff}
+.slot .btn{position:relative}
+.slot .btn input{position:absolute;opacity:0;width:1px;height:1px}
+.slot .btn:focus-within{outline:3px solid var(--pen);outline-offset:2px}
+.qerr{color:var(--red)}
+.publish-row{margin-top:18px;padding-top:18px;border-top:2px solid var(--ink)}
+.live-bar{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;margin:18px 0 14px;padding:10px 14px;border-radius:8px;background:var(--pen-soft)}
+.live-dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
+.live-dot.on{background:var(--green);box-shadow:0 0 0 4px color-mix(in srgb,var(--green) 25%,transparent)}
+.zoom{display:flex;align-items:center;gap:6px}
+.zv{min-width:48px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
+.lgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.lcard{border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--surface);border-left:6px solid var(--pen)}
+.lcard.done{border-left-color:var(--green)}
+.lcard.lost{border-left-color:var(--red)}
+.lname{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lbar{height:6px;border-radius:3px;background:var(--grid);overflow:hidden;margin:8px 0}
+.lbar i{display:block;height:100%;background:var(--pen)}
+.lcard.done .lbar i{background:var(--green)}
+.lstats{display:flex;justify-content:space-between;gap:8px;font-size:14px}
+.lstats .bad{color:var(--red);font-weight:700}
+.lfoot{font-size:14px;font-weight:600;margin-top:6px;font-variant-numeric:tabular-nums}
+.lcard.lost .lfoot{color:var(--red)}
+.res-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-top:22px}
+.res-head h3{margin:0 0 4px;font-size:22px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0;margin:18px 0;border:1.5px solid var(--ink);border-radius:10px;overflow:hidden}
+.stats div{padding:12px 16px;border-right:1px solid var(--line)}
+.stats div:last-child{border-right:0}
+.stats dt{font-size:14px;color:var(--muted)}
+.stats dd{margin:0;font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:14px;background:var(--surface)}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{border-bottom:2px solid var(--ink);font-weight:700}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}
+.code-inline{font-variant-numeric:tabular-nums;letter-spacing:.08em}
+.chart{display:flex;gap:6px;align-items:flex-end;overflow-x:auto;padding:22px 4px 4px;border-bottom:2px solid var(--ink)}
+.col{flex:1 0 44px;max-width:88px;display:flex;flex-direction:column;align-items:stretch;gap:6px;background:none;border:0;padding:0;font:inherit;color:inherit}
+.track{height:180px;display:flex;align-items:flex-end}
+.bar{width:100%;position:relative;min-height:2px;background:var(--pen);border-radius:4px 4px 0 0}
+.cv{position:absolute;bottom:100%;left:-6px;right:-6px;text-align:center;font-size:12px;font-weight:700;padding-bottom:2px;font-variant-numeric:tabular-nums}
+.cl{font-size:12px;text-align:center;color:var(--muted);white-space:nowrap}
+.qcol{cursor:pointer;border-radius:6px}
+.qcol.low .bar{background:var(--red)}
+.qcol:hover .bar,.qcol[aria-pressed="true"] .bar{background:var(--fill)}
+.qcol[aria-pressed="true"] .cl{color:var(--ink);font-weight:700}
+.rate-detail{margin-top:12px;padding:12px 14px;border-radius:8px;background:var(--pen-soft);min-height:48px;font-size:15px}
+
+/* student */
+.code-input{font-size:22px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-variant-numeric:tabular-nums}
+.exam-info{margin-top:22px;padding-top:20px;border-top:2px solid var(--ink)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px 18px;margin:0 0 14px}
+.facts dt{font-size:13px;color:var(--muted)}
+.facts dd{margin:0;font-weight:600}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:22px}
+
+/* exam */
+.exam{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:20px;align-items:start;padding-top:18px}
+#qpane{scroll-margin-top:80px}
+.qhead{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}
+.qnum{font-size:30px;font-weight:800;letter-spacing:-.02em}
+.qtype{color:var(--muted);font-size:14px}
+.qimg{display:block;max-width:100%;height:auto;margin:0 auto 10px;background:#fff;border-radius:4px}
+.qimg:not([src]){min-height:140px;width:100%;background:var(--grid)}
+.answer-zone{margin-top:18px;padding-top:18px;border-top:1px dashed var(--line)}
+.bubbles{display:flex;gap:16px;flex-wrap:wrap}
+.bubble{width:50px;height:50px;border-radius:50%;border:2px solid var(--ink);background:var(--surface);font-weight:700;font-size:17px;cursor:pointer;display:grid;place-items:center;transition:background .12s,color .12s,transform .12s;padding:0}
+.bubble:hover{background:var(--pen-soft)}
+.bubble[aria-pressed="true"]{background:radial-gradient(circle at 35% 30%,color-mix(in srgb,var(--fill) 70%,#888),var(--fill) 70%);color:var(--fill-ink);border-color:var(--fill);transform:scale(1.05)}
+.tf-row{display:flex;align-items:center;gap:14px;padding:5px 0}
+.tf-label{width:28px;font-weight:700}
+.tf-row .bubble{width:44px;height:44px;font-size:15px}
+.sa-input{max-width:220px;font-size:24px;font-weight:700;letter-spacing:.05em;text-align:center}
+.qnav{display:flex;justify-content:space-between;gap:12px;margin-top:22px}
+.sheet{position:sticky;top:78px;background:var(--surface);border:2px solid var(--ink);border-radius:12px;padding:16px}
+.sheet-h{font-weight:700;margin-bottom:2px}
+.gridn{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:12px 0 16px}
+.gn{aspect-ratio:1;border-radius:50%;border:1.5px solid var(--line);background:var(--surface);font-size:13px;font-weight:600;cursor:pointer;padding:0;font-variant-numeric:tabular-nums}
+.gn.done{background:var(--fill);border-color:var(--fill);color:var(--fill-ink)}
+.gn.part{border:2px solid var(--fill);background:var(--grid)}
+.gn.cur{outline:2.5px solid var(--pen);outline-offset:2px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:14px}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:50%;vertical-align:-1px;margin-right:4px;border:1.5px solid var(--fill)}
+.legend .l-done{background:var(--fill)}
+.legend .l-part{background:var(--grid)}
+.legend .l-none{border-color:var(--line)}
+
+/* result */
+.ok-banner{display:flex;gap:14px;align-items:center;margin-top:28px;padding:14px 16px;border-radius:10px;background:var(--green-soft);border:1.5px solid var(--green)}
+.check-bubble{flex:none;width:40px;height:40px;border-radius:50%;background:var(--green);color:var(--surface);display:grid;place-items:center;font-weight:800;font-size:20px}
+.score{font-size:clamp(76px,15vw,132px);font-weight:800;line-height:1;letter-spacing:-.045em;color:var(--red);margin:28px 0 8px;font-variant-numeric:tabular-nums}
+.score small{font-size:.28em;color:var(--muted);letter-spacing:0}
+.big-note{font-size:22px;color:var(--ink);margin:28px 0}
+.rv{padding:22px 0;border-top:1px solid var(--line)}
+.rv .qnum{font-size:21px}
+.mark{font-weight:700;font-size:15px}
+.mark.ok{color:var(--green)}
+.mark.bad{color:var(--red)}
+.mark.part{color:color-mix(in srgb,var(--red) 50%,var(--ink))}
+.ansline{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:10px 0;font-size:15px}
+.ansline dt{color:var(--muted)}
+.ansline dd{margin:0;font-weight:700;letter-spacing:.03em}
+details summary{cursor:pointer;color:var(--pen);font-weight:600;margin:6px 0 10px}
+
+/* modal & toast */
+.modal-bg{position:fixed;inset:0;z-index:60;background:color-mix(in srgb,#0A0F1A 55%,transparent);display:grid;place-items:center;padding:16px}
+.modal{width:min(460px,100%);background:var(--surface);border:2px solid var(--ink);border-radius:12px;padding:22px}
+.modal h3{margin:0 0 10px;font-size:20px}
+.modal .input{margin:6px 0 4px}
+.modal .row.end{margin-top:16px}
+.code-bubbles{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:16px 0 12px}
+.code-bubbles span{width:48px;height:48px;border-radius:50%;background:var(--fill);color:var(--fill-ink);display:grid;place-items:center;font-size:22px;font-weight:800}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:80;background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:8px;font-size:15px;max-width:calc(100% - 32px);box-shadow:0 6px 24px rgba(0,0,0,.2)}
+.toast.err{background:var(--red);color:#fff}
+.qimg[src]{cursor:zoom-in}
+.imgview{position:fixed;inset:0;z-index:70;background:rgba(10,15,26,.88);overflow:auto;cursor:zoom-out;padding:16px}
+.imgview img{display:block;background:#fff;max-width:none;width:max(100%,900px);margin:0 auto;border-radius:4px}
+.boot{display:grid;place-items:center;min-height:60vh;text-align:center}
+
+@media (max-width:960px){
+  .qrow{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .qrow-num{padding-top:0;grid-column:1/-1}
+  .qrow .btn.danger{margin-top:0;justify-self:start}
+}
+@media (max-width:820px){
+  .hero{grid-template-columns:1fr;gap:20px}
+  .deco{display:none}
+  .exam{grid-template-columns:1fr}
+  .sheet{position:static}
+  .gridn{grid-template-columns:repeat(auto-fill,minmax(42px,1fr))}
+  .panel{padding:16px}
+  .xwho{display:none}
+  .timer{font-size:20px;min-width:0}
+  .topbar{padding:8px 14px}
+}
+@media (max-width:520px){
+  .brand-t{display:none}
+  .xvio{font-size:13px}
+  .block{padding:16px}
+  .qrow{grid-template-columns:1fr}
+  .bubbles{gap:12px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<header class="topbar" id="topbar"></header>
+<main id="app"><div class="boot"><p class="lede">Đang kết nối hệ thống…</p></div></main>
+<div id="modal-root"></div>
+<noscript><p style="padding:20px">Trang cần bật JavaScript để hoạt động.</p></noscript>
+<script>
+'use strict';
+/* =====================================================================
+   CẤU HÌNH FIREBASE (chỉ cần khi tự đăng trang lên GitHub Pages / web riêng)
+   Dán cấu hình web app Firebase vào đây, ví dụ:
+   const FIREBASE_CONFIG = { apiKey:"...", authDomain:"...", projectId:"...",
+     storageBucket:"...", messagingSenderId:"...", appId:"..." };
+   Để null: trang dùng kho dữ liệu của Claude (khi mở trong Claude)
+   hoặc chế độ thử trên một trình duyệt.
+   ===================================================================== */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBlSLK8KP6TpgMp72FyOSWuE262dfn9vgk",
+  authDomain: "thi-online-toan-thayhung.firebaseapp.com",
+  projectId: "thi-online-toan-thayhung",
+  storageBucket: "thi-online-toan-thayhung.firebasestorage.app",
+  messagingSenderId: "356255155851",
+  appId: "1:356255155851:web:e4fb99bd46e0417015768e"
+};
+
+/* ---------------- tiện ích ---------------- */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const pad = n => String(n).padStart(2, '0');
+function fmtClock(sec){ sec = Math.max(0, Math.floor(sec)); const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s = sec%60; return h ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`; }
+function fmtDate(ts){ if(!ts) return ''; const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())} ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`; }
+function fmtTime(ts){ const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+const round2 = x => Math.round((+x || 0) * 100) / 100;
+const fmtNum = x => round2(x).toLocaleString('vi-VN');
+const errSpan = m => `<span class="error">${esc(m)}</span>`;
+function rid(n = 8){ const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (const x of crypto.getRandomValues(new Uint8Array(n))) s += a[x % a.length]; return s; }
+const LS = {
+  get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
+  set(k, v){ try { localStorage.setItem(k, v); } catch(e){} },
+  del(k){ try { localStorage.removeItem(k); } catch(e){} },
+  getJSON(k){ try { return JSON.parse(this.get(k)); } catch(e){ return null; } },
+  setJSON(k, v){ this.set(k, JSON.stringify(v)); }
+};
+const SS = {
+  get(k){ try { return sessionStorage.getItem(k); } catch(e){ return null; } },
+  set(k, v){ try { sessionStorage.setItem(k, v); } catch(e){} }
+};
+function deviceId(){ let d = LS.get('tt_device'); if(!d){ d = rid(12); LS.set('tt_device', d); } return d; }
+function toast(msg, kind){ const t = document.createElement('div'); t.className = 'toast' + (kind ? ' ' + kind : ''); t.setAttribute('role', 'status'); t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 3200); }
+async function sha(s){
+  try { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('thitoan:' + s)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join(''); }
+  catch(e){ let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) | 0; return 'x' + h; }
+}
+function loadScript(src){ return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Không tải được ' + src)); document.head.appendChild(s); }); }
+function blobToDataURL(b){ return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(b); }); }
+async function saveViaAnchor(filename, blob){ const u = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = u; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 8000); }
+
+async function fitImage(blob, maxBytes){
+  if (blob.size <= maxBytes) return blob;
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Không đọc được ảnh')); i.src = url; });
+    let scale = Math.min(1, 2000 / img.naturalWidth);
+    for (let t = 0; t < 6; t++){
+      const w = Math.max(1, Math.round(img.naturalWidth * scale)), h = Math.max(1, Math.round(img.naturalHeight * scale));
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.drawImage(img, 0, 0, w, h);
+      for (const q of [0.9, 0.8, 0.7]){ const b = await new Promise(r => c.toBlob(r, 'image/jpeg', q)); if (b && b.size <= maxBytes) return b; }
+      scale *= 0.75;
+    }
+    throw new Error('Ảnh quá lớn, hãy giảm kích thước ảnh.');
+  } finally { URL.revokeObjectURL(url); }
+}
+
+/* ---------------- kho dữ liệu ---------------- */
+function makeLocalBackend(){
+  let dbp;
+  const open = () => dbp || (dbp = new Promise((res, rej) => {
+    const r = indexedDB.open('thitoan-demo', 1);
+    r.onupgradeneeded = () => { r.result.createObjectStore('docs'); r.result.createObjectStore('imgs'); };
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  }));
+  const tx = async (store, mode, fn) => { const d = await open(); return new Promise((res, rej) => { const t = d.transaction(store, mode); const req = fn(t.objectStore(store)); t.oncomplete = () => res(req ? req.result : undefined); t.onerror = () => rej(t.error); }); };
+  const listeners = new Set();
+  const bc = ('BroadcastChannel' in window) ? new BroadcastChannel('thitoan-demo') : null;
+  const fire = col => listeners.forEach(l => l.col === col && l.fire());
+  if (bc) bc.onmessage = e => fire(e.data);
+  const notify = col => { fire(col); if (bc) bc.postMessage(col); };
+  const be = {
+    kind: 'local', canUpload: true, imgLimit: 4000000,
+    async get(col, id){ const v = await tx('docs', 'readonly', s => s.get(col + '/' + id)); return v ? v.data : null; },
+    async set(col, id, data){ await tx('docs', 'readwrite', s => s.put({ id, data: JSON.parse(JSON.stringify(data)) }, col + '/' + id)); notify(col); },
+    async del(col, id){ await tx('docs', 'readwrite', s => s.delete(col + '/' + id)); notify(col); },
+    async list(col, field, value){
+      const rows = await tx('docs', 'readonly', s => s.getAll(IDBKeyRange.bound(col + '/', col + '/\uffff'))) || [];
+      return rows.map(r => ({ ...r.data, id: r.id })).filter(d => field === undefined || d[field] === value);
+    },
+    watch(col, field, value, cb){ const l = { col, fire: async () => cb(await be.list(col, field, value)) }; listeners.add(l); l.fire(); return () => listeners.delete(l); },
+    async putImage(blob){ const id = rid(16); await tx('imgs', 'readwrite', s => s.put(blob, id)); return id; },
+    async imageUrl(ref){ const b = await tx('imgs', 'readonly', s => s.get(ref)); return b ? URL.createObjectURL(b) : ''; },
+    async delImage(ref){ await tx('imgs', 'readwrite', s => s.delete(ref)); },
+    save: saveViaAnchor
+  };
+  return be;
+}
+
+function makeClaudeBackend(db, assets, downloads){
+  const q = (col, field, value) => { let r = db.collection(col); if (field !== undefined) r = r.where(field, '==', value); return r.limit(1000); };
+  return {
+    kind: 'claude', canUpload: !!assets, imgLimit: 4000000,
+    async get(col, id){ const s = await db.doc(`${col}/${id}`).get(); return s.exists ? { ...s.data() } : null; },
+    async set(col, id, data){ await db.doc(`${col}/${id}`).set(JSON.parse(JSON.stringify(data))); },
+    async del(col, id){ await db.doc(`${col}/${id}`).delete(); },
+    async list(col, field, value){ const s = await q(col, field, value).get(); return s.docs.map(d => ({ ...d.data(), id: d.id })); },
+    watch(col, field, value, cb){
+      return q(col, field, value).onSnapshot(s => cb(s.docs.map(d => ({ ...d.data(), id: d.id }))), () => toast('Mất kết nối theo dõi. Bấm “Theo dõi ngay” để kết nối lại.', 'err'));
+    },
+    async putImage(blob){ if (!assets) throw new Error('Tài khoản này không có quyền tải ảnh lên.'); const r = await assets.upload(blob); return r.id; },
+    async imageUrl(ref){ return '/_blob/' + ref; },
+    async delImage(ref){ try { if (assets) await assets.delete(ref); } catch(e){} },
+    async save(filename, blob){ if (!downloads) throw new Error('Trang này không hỗ trợ tải file.'); await downloads.save({ filename, data: blob }); }
+  };
+}
+
+async function makeFirebaseBackend(cfg){
+  const V = '10.12.2';
+  await loadScript(`https://www.gstatic.com/firebasejs/${V}/firebase-app-compat.js`);
+  await loadScript(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore-compat.js`);
+  firebase.initializeApp(cfg);
+  const fs = firebase.firestore();
+  const q = (col, field, value) => { let r = fs.collection(col); if (field !== undefined) r = r.where(field, '==', value); return r; };
+  return {
+    kind: 'firebase', canUpload: true, imgLimit: 700000,
+    async get(col, id){ const s = await fs.collection(col).doc(id).get(); return s.exists ? s.data() : null; },
+    async set(col, id, data){ await fs.collection(col).doc(id).set(JSON.parse(JSON.stringify(data))); },
+    async del(col, id){ await fs.collection(col).doc(id).delete(); },
+    async list(col, field, value){ const s = await q(col, field, value).get(); return s.docs.map(d => ({ ...d.data(), id: d.id })); },
+    watch(col, field, value, cb){ return q(col, field, value).onSnapshot(s => cb(s.docs.map(d => ({ ...d.data(), id: d.id }))), () => toast('Mất kết nối theo dõi. Bấm “Theo dõi ngay” để kết nối lại.', 'err')); },
+    async putImage(blob){ const data = await blobToDataURL(blob); const id = rid(16); await fs.collection('images').doc(id).set({ data }); return id; },
+    async imageUrl(ref){ const s = await fs.collection('images').doc(ref).get(); return s.exists ? s.data().data : ''; },
+    async delImage(ref){ try { await fs.collection('images').doc(ref).delete(); } catch(e){} },
+    save: saveViaAnchor
+  };
+}
+
+async function initBackend(){
+  if (FIREBASE_CONFIG) return makeFirebaseBackend(FIREBASE_CONFIG);
+  if (window.claude && typeof window.claude.use === 'function'){
+    const db = await window.claude.use('db');
+    if (db){
+      const [assets, downloads] = await Promise.all([window.claude.use('assets'), window.claude.use('downloads')]);
+      return makeClaudeBackend(db, assets, downloads);
+    }
+  }
+  return makeLocalBackend();
+}
+
+const IMG_CACHE = new Map();
+function imgUrl(ref){ if (!IMG_CACHE.has(ref)) IMG_CACHE.set(ref, S.be.imageUrl(ref).catch(() => '')); return IMG_CACHE.get(ref); }
+function hydrate(root){
+  if (!root) return;
+  root.querySelectorAll('img[data-ref]:not([src])').forEach(img => imgUrl(img.dataset.ref).then(u => {
+    if (u) img.src = u;
+    else { const p = document.createElement('p'); p.className = 'hint'; p.textContent = 'Không tải được ảnh.'; img.replaceWith(p); }
+  }));
+}
+
+/* ---------------- đáp án & chấm điểm ---------------- */
+const TYPE_LABEL = { mc: 'Trắc nghiệm', tf: 'Đúng/Sai', sa: 'Trả lời ngắn' };
+const PLACEHOLDER = { mc: 'A, B, C hoặc D', tf: 'VD: ĐSĐS', sa: 'VD: 2,5' };
+function normTF(raw){
+  let t = String(raw ?? '').normalize('NFC').toUpperCase();
+  t = t.replace(/ĐÚNG/g, 'Đ').replace(/SAI/g, 'S').replace(/[A-D]\s*[).:]/g, '').replace(/[^ĐDTSF]/g, '');
+  if (t.length !== 4) return null;
+  return t.replace(/[DT]/g, 'Đ').replace(/F/g, 'S');
+}
+function detectType(raw){
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  if (/^[A-D]$/i.test(s)) return 'mc';
+  if (!/\d/.test(s) && normTF(s)) return 'tf';
+  return 'sa';
+}
+function canon(q){
+  const v = String(q.answer ?? '').trim();
+  if (q.type === 'mc') return v.toUpperCase();
+  if (q.type === 'tf') return normTF(v);
+  return v;
+}
+function answerError(q, strict){
+  const v = String(q.answer ?? '').trim();
+  if (!v) return (strict || S.draft.showErrors) ? 'Chưa có đáp án' : '';
+  if (q.type === 'mc') return /^[A-D]$/i.test(v) ? '' : 'Trắc nghiệm cần một chữ A–D';
+  if (q.type === 'tf') return normTF(v) ? '' : 'Cần 4 ký tự Đ hoặc S, VD: ĐSĐS';
+  return '';
+}
+function matchSA(a, k){
+  if (a == null || String(a).trim() === '') return false;
+  const f = x => String(x).trim().replace(/\s/g, '').replace(/,/g, '.');
+  const x = f(a), y = f(k);
+  const nx = Number(x), ny = Number(y);
+  if (x !== '' && y !== '' && !isNaN(nx) && !isNaN(ny)) return Math.abs(nx - ny) < 1e-9;
+  return x.toUpperCase() === y.toUpperCase();
+}
+function isFull(q, a){ if (q.type === 'tf') return Array.isArray(a) && a.filter(Boolean).length === 4; return a != null && String(a).trim() !== ''; }
+function isPart(q, a){ return q.type === 'tf' && Array.isArray(a) && a.some(Boolean) && !isFull(q, a); }
+const countAnswered = (E, ans) => E.questions.filter(q => isFull(q, ans[q.n])).length;
+function maxScore(E){ const sc = E.scoring; return round2(E.questions.reduce((s, q) => s + (q.type === 'mc' ? sc.mc : q.type === 'tf' ? sc.tf[4] : sc.sa), 0)); }
+function grade(E, key, ans){
+  const sc = E.scoring; let raw = 0, max = 0, correct = 0; const perQ = [];
+  const items = E.questions.map(q => {
+    const k = key.answers[q.n]; const a = ans[q.n];
+    let pts = 0, full = 0, ok = false, nOk = null;
+    if (q.type === 'mc'){ full = sc.mc; ok = a === k; pts = ok ? full : 0; }
+    else if (q.type === 'tf'){ full = sc.tf[4]; nOk = 0; for (let i = 0; i < 4; i++) if (Array.isArray(a) && a[i] && k && a[i] === k[i]) nOk++; pts = sc.tf[nOk] || 0; ok = nOk === 4; }
+    else { full = sc.sa; ok = matchSA(a, k); pts = ok ? full : 0; }
+    raw += pts; max += full; if (ok) correct++; perQ.push(ok ? 1 : 0);
+    return { q, a, k, pts, full, ok, nOk };
+  });
+  return { items, score: round2(raw), max: round2(max), correct, total: E.questions.length, perQ };
+}
+function fmtAns(q, a){
+  if (q.type === 'tf') return Array.isArray(a) && a.some(Boolean) ? a.map(x => x || '_').join('') : '(bỏ trống)';
+  return a == null || String(a).trim() === '' ? '(bỏ trống)' : String(a);
+}
+
+/* ---------------- đọc file ---------------- */
+const IMG_RE = /\.(png|jpe?g|webp|gif)$/i;
+const SHEET_RE = /\.(xlsx|xls|csv)$/i;
+function mimeOf(n){ const e = n.split('.').pop().toLowerCase(); return { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' }[e] || 'image/png'; }
+function classify(name){
+  const b = name.replace(/\.[^.]+$/, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/đ/g, 'd');
+  let m = b.match(/^(?:cau|c|q|question)[\s_\-.]*0*(\d+)/); if (m) return { kind: 'q', n: +m[1] };
+  m = b.match(/^(?:da|dapan|dap_an|loigiai|loi_giai|lg|giai|sol|solution)[\s_\-.]*0*(\d+)/); if (m) return { kind: 's', n: +m[1] };
+  return null;
+}
+function parseSheet(ab){
+  if (!window.XLSX) throw new Error('Không tải được thư viện đọc Excel. Kiểm tra mạng rồi tải lại trang.');
+  const wb = XLSX.read(ab, { type: 'array' });
+  const out = {}; const nrm = v => String(v ?? '').normalize('NFC').trim();
+  const sheets = wb.SheetNames.map(sn => XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: '', raw: false }));
+  for (const rows of sheets){
+    let qCol = -1, aCol = -1;
+    for (const row of rows){
+      const cells = row.map(nrm); const low = cells.map(c => c.toLowerCase());
+      const ai = low.findIndex(c => /^(đáp\s*án|dap\s*an|answer|key)/.test(c));
+      let qi = low.findIndex(c => /^(câu|cau|question)/.test(c)); if (qi < 0) qi = low.findIndex(c => /^(stt|số)/.test(c));
+      if (ai >= 0 && qi >= 0 && ai !== qi){ aCol = ai; qCol = qi; continue; }
+      if (qCol >= 0){ const m = (cells[qCol] || '').match(/(\d+)/); const a = cells[aCol]; if (m && a && out[+m[1]] === undefined) out[+m[1]] = a; continue; }
+      const idx = cells.findIndex(c => /^(?:c[aâ]u\s*)?\d{1,3}\s*[.:)]?$/i.test(c));
+      if (idx < 0) continue;
+      const n = +cells[idx].match(/\d+/)[0];
+      const rest = cells.slice(idx + 1).filter(Boolean);
+      if (rest.length && out[n] === undefined) out[n] = rest[0];
+    }
+  }
+  if (!Object.keys(out).length){ // bảng ngang: hàng số câu, hàng dưới là đáp án
+    for (const rows of sheets) rows.forEach((row, r) => {
+      const cells = row.map(nrm); const nums = cells.map(c => /^\d{1,3}$/.test(c) ? +c : null);
+      if (nums.filter(x => x !== null).length >= 3 && rows[r + 1]){ const nx = rows[r + 1].map(nrm); nums.forEach((n, i) => { if (n !== null && nx[i] && out[n] === undefined) out[n] = nx[i]; }); }
+    });
+  }
+  return out;
+}
+
+/* ---------------- trạng thái ---------------- */
+function newDraft(){
+  return { teacher: LS.get('tt_teacher') || '', title: '', duration: 90, maxLogins: 1, preventReload: true, openAt: '', closeAt: '',
+    showAnswers: true, showScore: true, scoring: { mc: 0.25, sa: 0.5, tf1: 0.1, tf2: 0.25, tf3: 0.5, tf4: 1 },
+    questions: [], excelFile: null, imageFiles: [], showErrors: false };
+}
+const S = {
+  be: null, view: 'boot', role: null, teacher: false, ttab: 'create', draft: newDraft(), exams: [],
+  live: { code: '', watching: '', unsub: null, subs: [], zoom: 1, tick: null, ok: false },
+  res: { code: '' }, st: { code: '', exam: null }, x: null, xTick: null, done: null
+};
+const loadSess = code => LS.getJSON('tt_sess_' + code);
+const saveSess = s => LS.setJSON('tt_sess_' + s.code, s);
+
+/* ---------------- hộp thoại ---------------- */
+function modal({ title, body = '', html = '', input = null, ok = 'Đồng ý', cancel = 'Hủy', kind = 'primary', validate = null }){
+  return new Promise(resolve => {
+    const prev = document.activeElement;
+    const el = document.createElement('div'); el.className = 'modal-bg';
+    el.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="m-t"><h3 id="m-t">${esc(title)}</h3>${body ? `<p>${esc(body)}</p>` : ''}${html}${input ? `<input class="input" id="m-in" type="${input}" autocomplete="off" aria-label="${esc(title)}">` : ''}<div class="error" id="m-err" role="alert"></div><div class="row end">${cancel ? `<button class="btn" data-m="no">${esc(cancel)}</button>` : ''}<button class="btn ${kind}" data-m="yes">${esc(ok)}</button></div></div>`;
+    $('#modal-root').appendChild(el);
+    const inp = $('#m-in', el);
+    (inp || $('[data-m="yes"]', el)).focus();
+    let busy = false;
+    const close = v => { if (!el.isConnected) return; el.remove(); document.removeEventListener('keydown', key, true); if (prev && prev.focus && prev.isConnected) prev.focus(); resolve(v); };
+    const no = () => close(inp ? null : false);
+    const yes = async () => {
+      if (busy) return; const v = inp ? inp.value : true;
+      if (validate){ busy = true; $('#m-err', el).textContent = ''; const e = await validate(v); busy = false; if (e){ $('#m-err', el).textContent = e; if (inp) inp.select(); return; } }
+      close(v);
+    };
+    const key = e => {
+      if (e.key === 'Escape' && cancel){ e.preventDefault(); no(); }
+      else if (e.key === 'Enter'){ e.preventDefault(); const f = document.activeElement; if (f && f.dataset && f.dataset.m === 'no') no(); else yes(); }
+      else if (e.key === 'Tab'){ const fs = $$('button,input', el); const i = fs.indexOf(document.activeElement); if (e.shiftKey && i <= 0){ e.preventDefault(); fs[fs.length - 1].focus(); } else if (!e.shiftKey && i === fs.length - 1){ e.preventDefault(); fs[0].focus(); } }
+    };
+    document.addEventListener('keydown', key, true);
+    el.addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (b) b.dataset.m === 'yes' ? yes() : no(); });
+    el._close = no;
+  });
+}
+const closeModals = () => $$('.modal-bg').forEach(m => m._close && m._close());
+
+/* ---------------- khung trang ---------------- */
+function topbarHTML(){
+  const brand = `<div class="brand"><span class="brand-mark" aria-hidden="true"></span><span class="brand-t">Thi Toán Online</span></div>`;
+  if (S.view === 'exam' && S.x){
+    const s = S.x.sess;
+    return `${brand}<div class="xbar"><span class="xwho">Thí sinh: <strong>${esc(s.name)}</strong></span><span class="xvio ${s.violations ? 'bad' : ''}" id="xvio">Vi phạm: ${s.violations}</span><span class="timer" id="xtimer" role="timer" aria-label="Thời gian còn lại">--:--</span><button class="btn primary small" data-act="submit">Nộp bài</button></div>`;
+  }
+  const role = S.role === 'teacher' ? 'Giáo viên' : S.role === 'student' ? 'Học sinh' : '';
+  return `${brand}<div class="row nowrap">${role ? `<span class="role-chip">${role}</span><button class="btn small ghost" data-act="home">Đổi vai trò</button>` : ''}</div>`;
+}
+function modeNotice(){
+  if (!S.be || S.be.kind !== 'local') return '';
+  return `<div class="notice">Chế độ thử: dữ liệu chỉ lưu trên trình duyệt này. Có thể mở hai tab để thử vai giáo viên và học sinh. Để học sinh thi trên máy của mình, cần mở trang qua Claude hoặc cấu hình Firebase.</div>`;
+}
+const VIEWS = {
+  boot: () => `<div class="boot"><p class="lede" role="status">Đang kết nối hệ thống…</p></div>`,
+  fatal: () => `<div class="wrap narrow"><h1>Không kết nối được hệ thống</h1><p class="lede">${esc(S.fatal || '')}</p><button class="btn primary" onclick="location.reload()">Tải lại trang</button></div>`,
+  home: homeView, teacher: teacherView, student: studentView, exam: examView, result: resultView
+};
+function render(){
+  $('#topbar').innerHTML = topbarHTML();
+  $('#app').innerHTML = VIEWS[S.view]();
+  if (S.view === 'exam'){ fillQ(); fillSheet(); xTick(); }
+  if (S.view === 'teacher' && S.ttab === 'live' && S.live.watching) paintLive();
+  if (S.view === 'result') hydrate($('#app'));
+}
+function go(v){ if (v !== 'teacher') stopLive(); S.view = v; render(); window.scrollTo(0, 0); }
+
+/* ---------------- trang chủ ---------------- */
+function homeView(){
+  const rows = [['1','B'],['2','D'],['3','A'],['4','C'],['5','A']];
+  return `<div class="wrap"><section class="hero">
+    <div>
+      <h1>Hệ thống kiểm tra Toán online</h1>
+      <p class="lede">Giáo viên tạo đề từ file Excel đáp án và ảnh câu hỏi, theo dõi lớp làm bài và xem thống kê. Học sinh nhập mã đề để vào thi.</p>
+      ${modeNotice()}
+      <h2 class="pick-h">Chọn vai trò của bạn</h2>
+      <div class="roles">
+        <button class="role" data-act="role-teacher"><span class="role-bubble" aria-hidden="true">GV</span><span><strong>Giáo viên</strong><span class="hint">Tạo đề, theo dõi, xem kết quả</span></span></button>
+        <button class="role" data-act="role-student"><span class="role-bubble" aria-hidden="true">HS</span><span><strong>Học sinh</strong><span class="hint">Nhập mã đề và làm bài</span></span></button>
+      </div>
+    </div>
+    <div class="deco" aria-hidden="true"><div class="deco-h">Phiếu trả lời</div>${rows.map(([n, p]) => `<div class="drow"><span class="dn">${n}</span>${'ABCD'.split('').map(L => `<span class="db ${L === p ? 'f' : ''}">${L}</span>`).join('')}</div>`).join('')}</div>
+  </section></div>`;
+}
+async function openTeacher(){
+  let cfg;
+  try { cfg = await S.be.get('config', 'teacher'); } catch(e){ toast('Không kết nối được hệ thống: ' + e.message, 'err'); return; }
+  const unlocked = () => { S.teacher = true; S.role = 'teacher'; go('teacher'); loadExams(); };
+  if (cfg && cfg.hash && SS.get('tt_teacher_ok') === cfg.hash) return unlocked();
+  const first = !(cfg && cfg.hash);
+  let hash = '';
+  const v = await modal({
+    title: first ? 'Tạo mã khoá giáo viên' : 'Yêu cầu quyền truy cập',
+    body: first ? 'Chưa có mã khoá. Đặt mã khoá từ 4 ký tự để dùng cho các lần sau.' : 'Nhập mã khoá để vào trang Giáo viên.',
+    input: 'password', ok: 'Xác nhận',
+    validate: async val => {
+      if (val.length < 4) return 'Mã khoá cần ít nhất 4 ký tự.';
+      hash = await sha(val);
+      if (first){ try { await S.be.set('config', 'teacher', { hash, at: Date.now() }); } catch(e){ return 'Không lưu được mã khoá: ' + e.message; } return ''; }
+      return hash === cfg.hash ? '' : 'Mã khoá không đúng.';
+    }
+  });
+  if (v === null) return;
+  SS.set('tt_teacher_ok', hash);
+  unlocked();
+}
+
+/* ---------------- giáo viên ---------------- */
+function teacherView(){
+  const tabs = [['create', 'Tạo đề'], ['live', 'Theo dõi trực tiếp'], ['results', 'Kết quả']];
+  return `<div class="wrap">${modeNotice()}<nav class="subtabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" class="subtab" aria-selected="${S.ttab === k}" data-act="ttab" data-k="${k}">${l}</button>`).join('')}</nav><div id="tpanel">${tpanelHTML()}</div></div>`;
+}
+const tpanelHTML = () => S.ttab === 'create' ? createTab() : S.ttab === 'live' ? liveTab() : resultsTab();
+async function loadExams(){
+  try { S.exams = (await S.be.list('exams')).sort((a, b) => b.createdAt - a.createdAt); }
+  catch(e){ S.exams = []; toast('Không tải được danh sách đề.', 'err'); }
+  if (S.view === 'teacher' && S.ttab !== 'create'){ $('#tpanel').innerHTML = tpanelHTML(); if (S.ttab === 'live' && S.live.watching) paintLive(); }
+}
+function examSelect(id, cur){
+  if (!S.exams.length) return `<span class="hint">Chưa có đề nào. Tạo đề ở mục “Tạo đề”.</span>`;
+  return `<label class="field" style="flex:1 1 280px;max-width:520px"><span class="sr">Chọn đề</span><select class="input" id="${id}">${S.exams.map(e => `<option value="${esc(e.code)}" ${e.code === cur ? 'selected' : ''}>${esc(e.title)} – mã ${esc(e.code)}</option>`).join('')}</select></label>`;
+}
+
+function createTab(){
+  const d = S.draft, sc = d.scoring;
+  const scoreFields = [['mc', 'Trắc nghiệm'], ['sa', 'Trả lời ngắn'], ['tf1', 'Đúng/Sai, đúng 1 ý'], ['tf2', 'Đúng/Sai, đúng 2 ý'], ['tf3', 'Đúng/Sai, đúng 3 ý'], ['tf4', 'Đúng/Sai, đúng 4 ý']];
+  const imgNames = d.imageFiles.length ? `${d.imageFiles.length} file đã chọn` : 'Chưa chọn file';
+  return `
+  <section class="block">
+    <h2>Tạo đề kiểm tra mới</h2>
+    <div class="form-grid">
+      <label class="field"><span>Họ tên giáo viên <span class="req" aria-hidden="true">*</span></span><input class="input" data-d="teacher" value="${esc(d.teacher)}" autocomplete="name" required></label>
+      <label class="field">Tên đề<input class="input" data-d="title" value="${esc(d.title)}" placeholder="VD: Kiểm tra giữa kỳ I Toán 12"></label>
+      <label class="field">Thời gian làm bài (phút)<input class="input" type="number" min="1" max="600" data-d="duration" value="${esc(d.duration)}"></label>
+      <label class="field">Số lần vào thi tối đa mỗi thiết bị<input class="input" type="number" min="0" max="99" data-d="maxLogins" value="${esc(d.maxLogins)}"><span class="hint">Nhập 0 nếu không giới hạn.</span></label>
+      <label class="field">Thời gian mở đề (tuỳ chọn)<input class="input" type="datetime-local" data-d="openAt" value="${esc(d.openAt)}"><span class="hint">Học sinh không vào được trước giờ này.</span></label>
+      <label class="field">Thời gian đóng đề (tuỳ chọn)<input class="input" type="datetime-local" data-d="closeAt" value="${esc(d.closeAt)}"><span class="hint">Sau giờ này không nhận lượt vào mới. Học sinh đang làm vẫn làm tiếp.</span></label>
+    </div>
+    <div class="checks">
+      <label class="check"><input type="checkbox" data-d="preventReload" ${d.preventReload ? 'checked' : ''}><span>Ngăn tải lại trang hoặc thoát ra vào lại: mỗi lần vào lại bài đang làm tính thêm một lượt</span></label>
+      <label class="check"><input type="checkbox" data-d="showAnswers" ${d.showAnswers ? 'checked' : ''}><span>Cho học sinh xem đáp án và lời giải sau khi nộp</span></label>
+      <label class="check"><input type="checkbox" data-d="showScore" ${d.showScore ? 'checked' : ''}><span>Cho học sinh xem điểm sau khi nộp</span></label>
+    </div>
+    <h3>Điểm mỗi câu</h3>
+    <div class="score-grid">${scoreFields.map(([k, l]) => `<label class="field">${l}<input class="input" type="number" step="0.05" min="0" data-sc="${k}" value="${esc(sc[k])}"></label>`).join('')}</div>
+  </section>
+  <section class="block">
+    <h2>Nhập câu hỏi từ Excel và ảnh</h2>
+    <div class="form-grid">
+      <div class="field"><span>1. File đáp án (Excel)</span>
+        <label class="filebox"><input type="file" id="f-excel" accept=".xlsx,.xls,.csv"><span class="fbtn">Chọn file</span><span class="fname" id="f-excel-name">${d.excelFile ? esc(d.excelFile.name) : 'Chưa chọn file'}</span></label>
+        <span class="hint">Cột A: số thứ tự câu. Cột B: đáp án (A–D, ĐSĐS hoặc số).</span></div>
+      <div class="field"><span>2. Ảnh câu hỏi và lời giải</span>
+        <label class="filebox"><input type="file" id="f-imgs" multiple accept="image/*,.zip"><span class="fbtn">Chọn file</span><span class="fname" id="f-imgs-name">${imgNames}</span></label>
+        <span class="hint">Chọn nhiều ảnh cùng lúc hoặc một file .zip. Tên file có tiền tố Cau_ (câu hỏi) hoặc Da_ (lời giải) và số câu, VD: Cau_01.png, Da_01.png.</span></div>
+    </div>
+    <div class="row" style="margin-top:16px"><button class="btn primary" data-act="import">Tạo câu hỏi từ file</button><span id="import-msg" class="hint" role="status"></span></div>
+  </section>
+  <section class="block">
+    <div class="row between"><h2 style="margin:0">Danh sách câu hỏi<span class="count-badge" id="q-count">${d.questions.length}</span></h2><button class="btn" data-act="q-add">+ Thêm thủ công</button></div>
+    <div id="qlist" style="margin-top:14px">${qlistHTML()}</div>
+    <div class="row publish-row"><button class="btn primary big" data-act="publish">Tạo đề</button><span id="publish-msg" class="hint" role="status"></span></div>
+  </section>`;
+}
+function imgSlot(q, i, k, label){
+  const list = k === 'q' ? q.qImgs : q.sImgs;
+  return `<div class="field"><span>${label}</span><div class="slot">${list.map(x => `<img class="thumb" src="${x.url}" alt="">`).join('') || '<span class="hint">Chưa có</span>'}<label class="btn small">${list.length ? 'Đổi' : 'Chọn'}<input type="file" accept="image/*" multiple data-slot="${k}" data-i="${i}" aria-label="${label} câu ${q.n}"></label></div></div>`;
+}
+function qlistHTML(){
+  const qs = S.draft.questions;
+  if (!qs.length) return `<div class="empty">Chưa có câu hỏi. Chọn file ở trên rồi bấm “Tạo câu hỏi từ file”, hoặc thêm từng câu.</div>`;
+  return qs.map((q, i) => `<div class="qrow">
+    <div class="qrow-num">Câu ${q.n}</div>
+    <label class="field">Loại câu<select class="input" data-q="type" data-i="${i}">${Object.entries(TYPE_LABEL).map(([k, l]) => `<option value="${k}" ${q.type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <label class="field">Đáp án<input class="input" data-q="answer" data-i="${i}" value="${esc(q.answer)}" placeholder="${PLACEHOLDER[q.type]}" autocomplete="off"><span class="hint qerr" id="qerr-${i}">${esc(answerError(q))}</span></label>
+    ${imgSlot(q, i, 'q', 'Ảnh câu hỏi')}
+    ${imgSlot(q, i, 's', 'Ảnh lời giải')}
+    <button class="btn small danger" data-act="q-del" data-i="${i}" aria-label="Xoá câu ${q.n}">Xoá</button>
+  </div>`).join('');
+}
+function refreshQList(){ const el = $('#qlist'); if (el) el.innerHTML = qlistHTML(); const c = $('#q-count'); if (c) c.textContent = S.draft.questions.length; }
+function revokeQ(q){ [...q.qImgs, ...q.sImgs].forEach(x => URL.revokeObjectURL(x.url)); }
+function addQ(){ const qs = S.draft.questions; const n = qs.reduce((m, q) => Math.max(m, q.n), 0) + 1; qs.push({ n, type: 'mc', answer: '', manual: false, qImgs: [], sImgs: [] }); refreshQList(); }
+async function delQ(i){ const q = S.draft.questions[i]; if (!q) return; if (!await modal({ title: `Xoá câu ${q.n}?`, body: 'Câu này sẽ bị bỏ khỏi đề đang soạn.', ok: 'Xoá câu', kind: 'danger' })) return; revokeQ(q); S.draft.questions.splice(i, 1); refreshQList(); }
+
+async function doImport(){
+  const d = S.draft, msg = $('#import-msg');
+  if (!d.excelFile && !d.imageFiles.length){ msg.innerHTML = errSpan('Chọn file đáp án hoặc ảnh trước.'); return; }
+  if (d.questions.length && !await modal({ title: 'Thay danh sách câu hỏi?', body: 'Danh sách hiện tại sẽ được thay bằng câu hỏi đọc từ file.', ok: 'Thay danh sách' })) return;
+  msg.textContent = 'Đang đọc file…';
+  try {
+    const key = {}; const imgs = { q: {}, s: {} }; const skipped = [];
+    const addImg = (name, blob) => { const c = classify(name); if (!c){ skipped.push(name); return; } (imgs[c.kind][c.n] = imgs[c.kind][c.n] || []).push({ name, blob }); };
+    const readZip = async f => {
+      if (!window.JSZip) throw new Error('Không tải được thư viện đọc file zip. Kiểm tra mạng rồi tải lại trang.');
+      const zip = await JSZip.loadAsync(f);
+      for (const e of Object.values(zip.files)){
+        if (e.dir || e.name.includes('__MACOSX')) continue;
+        const base = e.name.split('/').pop(); if (!base || base.startsWith('.')) continue;
+        if (IMG_RE.test(base)){ const b = await e.async('blob'); addImg(base, new Blob([b], { type: mimeOf(base) })); }
+        else if (SHEET_RE.test(base)) Object.assign(key, parseSheet(await e.async('arraybuffer')));
+      }
+    };
+    if (d.excelFile) Object.assign(key, parseSheet(await d.excelFile.arrayBuffer()));
+    for (const f of d.imageFiles){
+      if (/\.zip$/i.test(f.name)) await readZip(f);
+      else if (IMG_RE.test(f.name)) addImg(f.name, f);
+      else if (SHEET_RE.test(f.name)) Object.assign(key, parseSheet(await f.arrayBuffer()));
+      else skipped.push(f.name);
+    }
+    const nums = [...new Set([...Object.keys(imgs.q), ...Object.keys(imgs.s), ...Object.keys(key)].map(Number))].filter(n => n > 0).sort((a, b) => a - b);
+    if (!nums.length) throw new Error('Không tìm thấy câu hỏi nào. Kiểm tra tên ảnh (Cau_01.png…) và file Excel (cột A số câu, cột B đáp án).');
+    d.questions.forEach(revokeQ);
+    const sortI = a => (a || []).sort((x, y) => x.name.localeCompare(y.name, undefined, { numeric: true })).map(x => ({ blob: x.blob, url: URL.createObjectURL(x.blob) }));
+    d.questions = nums.map(n => { const raw = key[n] !== undefined ? String(key[n]).trim() : ''; const t = detectType(raw) || 'mc'; return { n, type: t, answer: t === 'tf' ? normTF(raw) : raw, manual: false, qImgs: sortI(imgs.q[n]), sImgs: sortI(imgs.s[n]) }; });
+    d.showErrors = false;
+    refreshQList();
+    const noKey = d.questions.filter(q => !q.answer).length, noImg = d.questions.filter(q => !q.qImgs.length).length;
+    const parts = [`Đã tạo ${nums.length} câu.`];
+    if (noKey) parts.push(`${noKey} câu chưa có đáp án.`);
+    if (noImg) parts.push(`${noImg} câu chưa có ảnh đề.`);
+    if (skipped.length) parts.push(`Bỏ qua ${skipped.length} file không đúng tên.`);
+    msg.textContent = parts.join(' ');
+  } catch(e){ msg.innerHTML = errSpan(e.message || String(e)); }
+}
+
+async function publish(){
+  const d = S.draft, msg = $('#publish-msg'), be = S.be;
+  const problems = [];
+  if (!d.teacher.trim()) problems.push('Nhập họ tên giáo viên.');
+  const dur = Math.round(+d.duration);
+  if (!(dur >= 1 && dur <= 600)) problems.push('Thời gian làm bài từ 1 đến 600 phút.');
+  if (!d.questions.length) problems.push('Đề chưa có câu hỏi.');
+  const bad = d.questions.filter(q => answerError(q, true));
+  if (bad.length) problems.push(`Kiểm tra đáp án câu ${bad.map(q => q.n).join(', ')}.`);
+  const seen = new Set(), dup = new Set(); d.questions.forEach(q => seen.has(q.n) ? dup.add(q.n) : seen.add(q.n));
+  if (dup.size) problems.push(`Trùng số câu: ${[...dup].join(', ')}.`);
+  if (d.openAt && d.closeAt && new Date(d.closeAt) <= new Date(d.openAt)) problems.push('Giờ đóng đề phải sau giờ mở đề.');
+  if (Object.values(d.scoring).some(v => v === '' || isNaN(+v) || +v < 0)) problems.push('Điểm mỗi câu phải là số không âm.');
+  if (problems.length){ d.showErrors = true; refreshQList(); msg.innerHTML = errSpan(problems.join(' ')); return; }
+  const noImg = d.questions.filter(q => !q.qImgs.length).map(q => q.n);
+  if (noImg.length && !await modal({ title: 'Thiếu ảnh câu hỏi', body: `Câu ${noImg.join(', ')} chưa có ảnh câu hỏi. Vẫn tạo đề?`, ok: 'Vẫn tạo đề' })) return;
+  const hasImgs = d.questions.some(q => q.qImgs.length || q.sImgs.length);
+  if (hasImgs && !be.canUpload){ msg.innerHTML = errSpan('Tài khoản đang mở trang không có quyền tải ảnh lên. Hãy mở trang bằng tài khoản chủ trang.'); return; }
+  const btns = $$('[data-act="publish"],[data-act="import"],[data-act="q-add"]'); btns.forEach(b => b.disabled = true);
+  try {
+    let code = '';
+    for (let t = 0; t < 6; t++){ code = rid(6); if (!await be.get('exams', code)) break; }
+    const total = d.questions.reduce((s, q) => s + q.qImgs.length + q.sImgs.length, 0); let done = 0;
+    const up = async list => { const refs = []; for (const x of list){ msg.textContent = `Đang tải ảnh ${done + 1}/${total}…`; refs.push(await be.putImage(await fitImage(x.blob, be.imgLimit))); done++; } return refs; };
+    const questions = [], answers = {}, sol = {};
+    for (const q of d.questions){
+      questions.push({ n: q.n, type: q.type, q: await up(q.qImgs) });
+      answers[q.n] = canon(q);
+      const s = await up(q.sImgs); if (s.length) sol[q.n] = s;
+    }
+    msg.textContent = 'Đang lưu đề…';
+    const sc = d.scoring;
+    const exam = {
+      code, title: d.title.trim() || `Đề ${code}`, teacher: d.teacher.trim(), duration: dur,
+      maxLogins: Math.max(0, Math.round(+d.maxLogins || 0)), preventReload: !!d.preventReload,
+      openAt: d.openAt ? new Date(d.openAt).getTime() : null, closeAt: d.closeAt ? new Date(d.closeAt).getTime() : null,
+      showAnswers: !!d.showAnswers, showScore: !!d.showScore,
+      scoring: { mc: +sc.mc, sa: +sc.sa, tf: [0, +sc.tf1, +sc.tf2, +sc.tf3, +sc.tf4] },
+      createdAt: Date.now(), questions
+    };
+    await be.set('keys', code, { code, answers, sol });
+    await be.set('exams', code, exam);
+    LS.set('tt_teacher', exam.teacher);
+    d.questions.forEach(revokeQ);
+    S.draft = newDraft();
+    $('#tpanel').innerHTML = tpanelHTML();
+    window.scrollTo(0, 0);
+    loadExams();
+    await modal({ title: 'Đã tạo đề', html: `<p>Gửi mã đề này cho học sinh để vào thi đề “${esc(exam.title)}”.</p><div class="code-bubbles" aria-label="Mã đề ${esc(code)}">${code.split('').map(c => `<span>${c}</span>`).join('')}</div><p class="hint" style="text-align:center">Tổng điểm tối đa: ${fmtNum(maxScore(exam))}</p>`, ok: 'Sao chép mã', cancel: 'Đóng' }).then(ok => {
+      if (ok && navigator.clipboard) navigator.clipboard.writeText(code).then(() => toast('Đã sao chép mã đề ' + code)).catch(() => toast('Không sao chép được. Mã đề: ' + code));
+    });
+  } catch(e){
+    msg.innerHTML = errSpan('Tạo đề không thành công: ' + (e.message || e.code || e) + '. Thử lại.');
+  } finally { btns.forEach(b => { if (b.isConnected) b.disabled = false; }); }
+}
+
+/* theo dõi trực tiếp */
+function liveTab(){
+  const L = S.live;
+  return `<section class="block"><h2>Theo dõi học sinh làm bài</h2>
+    <div class="row">${examSelect('live-code', L.code || (S.exams[0] && S.exams[0].code))}${S.exams.length ? `<button class="btn primary" data-act="live-start">Theo dõi ngay</button>` : ''}</div>
+    ${L.watching ? `<div class="live-bar"><span class="live-dot" id="live-dot" aria-hidden="true"></span><span id="live-status" aria-live="polite">Đang kết nối…</span><span class="spacer"></span>
+      <span class="zoom" role="group" aria-label="Thu phóng danh sách"><span class="hint">Zoom</span><button class="btn small" data-act="zoom" data-z="-1" aria-label="Thu nhỏ">−</button><span class="zv" id="zv">${Math.round(L.zoom * 100)}%</span><button class="btn small" data-act="zoom" data-z="1" aria-label="Phóng to">+</button><button class="btn small ghost" data-act="zoom" data-z="0">Đặt lại</button></span></div>
+      <div id="live-grid"></div>` : `<p class="hint" style="margin-top:14px">Chọn đề rồi bấm “Theo dõi ngay”. Danh sách tự cập nhật khi học sinh làm bài.</p>`}
+  </section>`;
+}
+function startLive(){
+  const code = $('#live-code') && $('#live-code').value; if (!code) return;
+  stopLive();
+  Object.assign(S.live, { code, watching: code, ok: false, subs: [] });
+  $('#tpanel').innerHTML = liveTab();
+  S.live.unsub = S.be.watch('subs', 'code', code, list => { S.live.subs = list; S.live.ok = true; paintLive(); });
+  S.live.tick = setInterval(paintLive, 1000);
+  paintLive();
+}
+function stopLive(){ if (S.live.unsub) S.live.unsub(); S.live.unsub = null; clearInterval(S.live.tick); S.live.watching = ''; }
+function paintLive(){
+  const L = S.live, grid = $('#live-grid'); if (!grid) return;
+  const E = S.exams.find(e => e.code === L.watching); const total = E ? E.questions.length : 0; const now = Date.now();
+  const rows = L.subs.map(s => { const doing = s.status !== 'done'; const left = (s.endAt - now) / 1000; return { ...s, doing, left, lost: doing && left < -120 }; })
+    .sort((a, b) => (b.doing - a.doing) || String(a.name).localeCompare(String(b.name), 'vi'));
+  const doingN = rows.filter(r => r.doing && !r.lost).length, doneN = rows.filter(r => !r.doing).length;
+  $('#live-dot').className = 'live-dot' + (L.ok ? ' on' : '');
+  $('#live-status').innerHTML = L.ok ? `Đang cập nhật. Đang thi: <strong>${doingN}</strong> học sinh. Đã nộp: <strong>${doneN}</strong>.` : 'Đang kết nối…';
+  grid.innerHTML = rows.length ? `<div class="lgrid" style="zoom:${L.zoom}">${rows.map(r => {
+    const st = !r.doing ? 'done' : r.lost ? 'lost' : 'doing';
+    const foot = st === 'done' ? `Đã nộp ${fmtTime(r.submittedAt)}, ${fmtNum(r.score)} điểm` : st === 'lost' ? 'Hết giờ, chưa nộp bài' : `Còn ${fmtClock(r.left)}`;
+    const pct = total ? Math.round((r.answered || 0) / total * 100) : 0;
+    return `<article class="lcard ${st}"><div class="lname" title="${esc(r.name)}">${esc(r.name)}</div><span class="hint">${r.cls ? 'Lớp ' + esc(r.cls) : 'Chưa ghi lớp'}</span><div class="lbar"><i style="width:${pct}%"></i></div><div class="lstats"><span>Đã làm ${r.answered || 0}/${total}</span><span class="${r.violations ? 'bad' : ''}">Vi phạm ${r.violations || 0}</span></div><div class="lfoot">${foot}</div></article>`;
+  }).join('')}</div>` : `<div class="empty">Chưa có học sinh nào vào thi đề ${esc(L.watching)}.</div>`;
+}
+
+/* kết quả */
+function resultsTab(){
+  return `<section class="block"><h2>Xem kết quả thi</h2>
+    <div class="row">${examSelect('res-code', S.res.code || (S.exams[0] && S.exams[0].code))}${S.exams.length ? `<button class="btn primary" data-act="res-load">Xem kết quả</button>` : ''}</div>
+    <div id="res-area">${resAreaHTML()}</div></section>`;
+}
+const paintRes = () => { const el = $('#res-area'); if (el) el.innerHTML = resAreaHTML(); };
+async function loadResults(code){
+  code = code || ($('#res-code') && $('#res-code').value); if (!code) return;
+  S.res = { code, loading: true }; paintRes();
+  try {
+    const [exam, key, subs] = await Promise.all([S.be.get('exams', code), S.be.get('keys', code), S.be.list('subs', 'code', code)]);
+    S.res = { code, exam, key, doing: subs.filter(s => s.status !== 'done').length, subs: subs.filter(s => s.status === 'done').sort((a, b) => (b.score - a.score) || (a.submittedAt - b.submittedAt)), sel: null };
+  } catch(e){ S.res = { code, error: e.message || String(e) }; }
+  paintRes();
+}
+function resAreaHTML(){
+  const R = S.res;
+  if (!R.code) return `<p class="hint" style="margin-top:14px">Chọn đề rồi bấm “Xem kết quả”.</p>`;
+  if (R.loading) return `<p class="hint" style="margin-top:14px" role="status">Đang tải kết quả…</p>`;
+  if (R.error) return `<p style="margin-top:14px">${errSpan('Không tải được kết quả: ' + R.error)}</p>`;
+  if (!R.exam) return `<div class="empty" style="margin-top:14px">Không tìm thấy đề ${esc(R.code)}. Có thể đề đã bị xoá.</div>`;
+  const E = R.exam, subs = R.subs, max = maxScore(E), scores = subs.map(s => s.score);
+  const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+  const head = `<div class="res-head"><div><h3>${esc(E.title)}</h3><p class="hint">Mã đề <strong class="code-inline">${esc(E.code)}</strong>. Giáo viên ${esc(E.teacher)}. ${E.questions.length} câu, ${E.duration} phút, tổng ${fmtNum(max)} điểm. Tạo lúc ${fmtDate(E.createdAt)}.${R.doing ? ` ${R.doing} học sinh chưa nộp.` : ''}</p></div>
+    <div class="row"><button class="btn" data-act="res-load" data-code="${esc(E.code)}">Tải lại</button>${subs.length ? `<button class="btn primary" data-act="export">Tải file Excel</button>` : ''}<button class="btn danger" data-act="del-exam" data-code="${esc(E.code)}">Xoá đề</button></div></div>`;
+  if (!subs.length) return head + `<div class="empty" style="margin-top:14px">Chưa có bài nộp.</div>`;
+  const table = `<div class="table-wrap"><table><thead><tr><th class="num">#</th><th>Họ tên</th><th>Lớp</th><th class="num">Điểm</th><th class="num">Câu đúng</th><th class="num">Vi phạm</th><th>Nộp lúc</th><th class="num">Thời gian làm</th><th>Ghi chú</th></tr></thead><tbody>${subs.map((s, i) => `<tr><td class="num">${i + 1}</td><td>${esc(s.name)}</td><td>${esc(s.cls)}</td><td class="num"><strong>${fmtNum(s.score)}</strong></td><td class="num">${s.correct}/${s.total}</td><td class="num">${s.violations || 0}</td><td>${fmtDate(s.submittedAt)}</td><td class="num">${fmtClock((Math.min(s.submittedAt, s.endAt) - s.startedAt) / 1000)}</td><td>${noteOf(s)}</td></tr>`).join('')}</tbody></table></div>`;
+  return head + `
+    <dl class="stats"><div><dt>Bài đã nộp</dt><dd>${subs.length}</dd></div><div><dt>Điểm trung bình</dt><dd>${fmtNum(avg)}</dd></div><div><dt>Cao nhất</dt><dd>${fmtNum(Math.max(...scores))}</dd></div><div><dt>Thấp nhất</dt><dd>${fmtNum(Math.min(...scores))}</dd></div></dl>
+    ${table}
+    <h3>Phân tích tổng điểm</h3>${histHTML(scores, max)}
+    <h3>Tỉ lệ làm đúng theo câu hỏi</h3><p class="hint">Di chuột, chạm hoặc chọn một cột để xem học sinh làm đúng câu đó. Cột đỏ: dưới 50% làm đúng.</p>${rateHTML(E, subs)}`;
+}
+function noteOf(s){ return s.reason === 'timeout' ? 'Hết giờ, tự nộp' : s.reason === 'locked' ? 'Hết lượt vào lại, tự nộp' : s.reason === 'saved' ? 'Nộp từ bản lưu' : ''; }
+function histHTML(scores, max){
+  const bins = Array(10).fill(0);
+  scores.forEach(s => { let i = max > 0 ? Math.floor(s / max * 10) : 0; bins[Math.min(9, Math.max(0, i))]++; });
+  const top = Math.max(1, ...bins), w = max / 10;
+  const r1 = x => (Math.round(x * 10) / 10).toLocaleString('vi-VN');
+  const label = i => `${r1(i * w)}–${r1((i + 1) * w)}`;
+  return `<div class="chart" role="img" aria-label="Phân bố điểm. ${bins.map((c, i) => `${label(i)} điểm: ${c} bài`).join('. ')}">${bins.map((c, i) => `<div class="col"><div class="track"><div class="bar" style="height:${c / top * 100}%"><span class="cv">${c || ''}</span></div></div><span class="cl">${label(i)}</span></div>`).join('')}</div>`;
+}
+function rateHTML(E, subs){
+  return `<div class="chart" id="rate-chart">${E.questions.map((q, i) => { const ok = subs.filter(s => s.perQ && s.perQ[i]).length; const p = Math.round(ok / subs.length * 100); return `<button class="col qcol ${p < 50 ? 'low' : ''}" data-act="rate" data-i="${i}" aria-pressed="${S.res.sel === i}" aria-label="Câu ${q.n}: ${p}% làm đúng"><div class="track"><div class="bar" style="height:${p}%"><span class="cv">${p}%</span></div></div><span class="cl">Câu ${q.n}</span></button>`; }).join('')}</div><div class="rate-detail" id="rate-detail" aria-live="polite">${rateDetail(S.res.sel)}</div>`;
+}
+function rateDetail(i){
+  const R = S.res; if (i == null || !R.exam) return '<span class="hint">Chưa chọn câu nào.</span>';
+  const q = R.exam.questions[i]; const k = R.key && R.key.answers ? R.key.answers[q.n] : '';
+  const names = R.subs.filter(s => s.perQ && s.perQ[i]).map(s => s.name + (s.cls ? ` (${s.cls})` : ''));
+  return `<strong>Câu ${q.n}</strong>, ${TYPE_LABEL[q.type]}, đáp án ${esc(k)}: ${names.length}/${R.subs.length} học sinh làm đúng${names.length ? ': ' + esc(names.join(', ')) : ''}.`;
+}
+async function exportExcel(){
+  const R = S.res, E = R.exam;
+  if (!window.XLSX){ toast('Không tải được thư viện Excel. Kiểm tra mạng rồi tải lại trang.', 'err'); return; }
+  const head = ['STT', 'Họ tên', 'Lớp', 'Điểm', 'Số câu đúng', 'Vi phạm', 'Bắt đầu', 'Nộp lúc', 'Thời gian làm (phút)', 'Ghi chú', ...E.questions.map(q => `Câu ${q.n}`)];
+  const rows = R.subs.map((s, i) => [i + 1, s.name, s.cls, round2(s.score), s.correct, s.violations || 0, fmtDate(s.startedAt), fmtDate(s.submittedAt), Math.round((Math.min(s.submittedAt, s.endAt) - s.startedAt) / 6000) / 10, noteOf(s),
+    ...E.questions.map((q, j) => `${fmtAns(q, s.answers ? s.answers[q.n] : null)} ${s.perQ && s.perQ[j] ? '✓' : '✗'}`)]);
+  const ws = XLSX.utils.aoa_to_sheet([head, ...rows]);
+  ws['!cols'] = [{ wch: 5 }, { wch: 26 }, { wch: 8 }, { wch: 7 }, { wch: 11 }, { wch: 8 }, { wch: 17 }, { wch: 17 }, { wch: 12 }, { wch: 22 }, ...E.questions.map(() => ({ wch: 10 }))];
+  const keyRows = [['Câu', 'Loại', 'Đáp án', 'Tỉ lệ làm đúng'], ...E.questions.map((q, i) => [q.n, TYPE_LABEL[q.type], R.key && R.key.answers ? R.key.answers[q.n] : '', `${Math.round(R.subs.filter(s => s.perQ && s.perQ[i]).length / R.subs.length * 100)}%`])];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Kết quả');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(keyRows), 'Đáp án');
+  const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  try { await S.be.save(`Ket_qua_${E.code}.xlsx`, blob); }
+  catch(e){ if (e && e.code === 'declined') return; toast('Không tải được file: ' + ((e && (e.message || e.code)) || e), 'err'); }
+}
+async function deleteExam(code){
+  const E = S.res.exam; if (!E) return;
+  if (!await modal({ title: 'Xoá đề?', body: `Xoá đề “${E.title}” (mã ${code}), toàn bộ ảnh và ${S.res.subs.length} bài nộp. Không khôi phục được.`, ok: 'Xoá đề', kind: 'danger' })) return;
+  try {
+    const subs = await S.be.list('subs', 'code', code);
+    for (const s of subs) await S.be.del('subs', s.id);
+    const key = await S.be.get('keys', code);
+    if (key && key.sol) for (const refs of Object.values(key.sol)) for (const r of refs) await S.be.delImage(r);
+    for (const q of E.questions) for (const r of q.q) await S.be.delImage(r);
+    await S.be.del('keys', code); await S.be.del('exams', code);
+    S.res = { code: '' };
+    toast('Đã xoá đề ' + code + '.');
+    await loadExams();
+  } catch(e){ toast('Xoá chưa xong: ' + (e.message || e), 'err'); }
+}
+
+/* ---------------- học sinh ---------------- */
+function studentView(){
+  const st = S.st;
+  return `<div class="wrap narrow"><h1>Vào thi</h1>${modeNotice()}
+    <div class="panel">
+      <label class="field" for="code">Mã đề</label>
+      <div class="row nowrap" style="margin-top:6px"><input class="input code-input" id="code" value="${esc(st.code)}" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="VD: 7KQ2MX"><button class="btn" data-act="check-code">Kiểm tra mã đề</button></div>
+      <div id="code-msg" role="status" style="margin-top:8px"></div>
+      ${st.exam ? examInfoHTML(st.exam) : ''}
+    </div></div>`;
+}
+function gate(E){
+  const now = Date.now();
+  if (E.openAt && now < E.openAt) return `Đề chưa mở. Giờ mở đề: ${fmtDate(E.openAt)}.`;
+  if (E.closeAt && now > E.closeAt) return `Đề đã đóng lúc ${fmtDate(E.closeAt)}.`;
+  const used = +LS.get('tt_login_' + E.code) || 0;
+  if (E.maxLogins > 0 && used >= E.maxLogins) return `Thiết bị này đã dùng hết ${E.maxLogins} lượt vào thi đề này.`;
+  return '';
+}
+function typeSummary(E){ const c = { mc: 0, tf: 0, sa: 0 }; E.questions.forEach(q => c[q.type]++); return [c.mc && `${c.mc} trắc nghiệm`, c.tf && `${c.tf} đúng/sai`, c.sa && `${c.sa} trả lời ngắn`].filter(Boolean).join(', '); }
+function examInfoHTML(E){
+  const sess = loadSess(E.code), done = LS.getJSON('tt_done_' + E.code), used = +LS.get('tt_login_' + E.code) || 0;
+  let action;
+  if (sess && sess.status === 'doing'){
+    const left = E.maxLogins > 0 ? Math.max(0, E.maxLogins - used) : Infinity;
+    const expired = Date.now() >= sess.endAt;
+    const canRe = !expired && (!E.preventReload || left > 0);
+    action = `<div class="notice"><strong>${esc(sess.name)}</strong> đang làm dở đề này${expired ? ' và đã hết giờ' : ''}.${E.preventReload && !expired ? (left === Infinity ? ' Mỗi lần vào lại được ghi nhận.' : ` Mỗi lần vào lại tính một lượt, còn ${left} lượt.`) : ''}${!canRe && !expired ? ' Đã hết lượt vào lại, chỉ có thể nộp phần đã làm.' : ''}</div>
+      <div class="row">${canRe ? `<button class="btn primary big" data-act="resume">Vào lại bài thi</button>` : ''}<button class="btn ${canRe ? '' : 'primary big'}" data-act="force-submit">Nộp phần đã làm</button></div>`;
+  } else {
+    const g = gate(E), me = LS.getJSON('tt_student') || {};
+    action = `${done ? `<div class="notice">Thiết bị này đã nộp bài đề này lúc ${fmtDate(done.at)}.${E.showScore || E.showAnswers ? ` <button class="linkbtn" data-act="view-past">Xem lại bài đã nộp</button>` : ''}</div>` : ''}
+      ${g ? `<div class="notice bad">${esc(g)}</div>` : `
+      <div class="form-grid two"><label class="field">Họ và tên<input class="input" id="st-name" autocomplete="name" value="${esc(me.name || '')}"></label><label class="field">Lớp<input class="input" id="st-cls" value="${esc(me.cls || '')}"></label></div>
+      <div id="st-err" class="error" role="alert" style="margin-bottom:8px"></div>
+      <button class="btn primary big wide" data-act="begin">Bắt đầu làm bài</button>
+      <p class="hint" style="margin-top:10px">Đồng hồ chạy ngay khi bấm. Mỗi lần rời khỏi trang làm bài (chuyển tab, mở ứng dụng khác) được ghi nhận là vi phạm.${E.maxLogins > 0 ? ` Thiết bị này còn ${E.maxLogins - used} lượt vào thi.` : ''}</p>`}`;
+  }
+  return `<div class="exam-info"><h2>${esc(E.title)}</h2>
+    <dl class="facts"><div><dt>Giáo viên</dt><dd>${esc(E.teacher)}</dd></div><div><dt>Thời gian</dt><dd>${E.duration} phút</dd></div><div><dt>Số câu</dt><dd>${E.questions.length} (${typeSummary(E)})</dd></div>${E.openAt ? `<div><dt>Mở đề</dt><dd>${fmtDate(E.openAt)}</dd></div>` : ''}${E.closeAt ? `<div><dt>Đóng đề</dt><dd>${fmtDate(E.closeAt)}</dd></div>` : ''}</dl>
+    ${action}</div>`;
+}
+async function checkCode(){
+  const inp = $('#code'); const code = inp.value.trim().toUpperCase().replace(/\s/g, ''); const msg = $('#code-msg');
+  if (!code){ msg.innerHTML = errSpan('Nhập mã đề giáo viên đã gửi.'); inp.focus(); return; }
+  if (!/^[A-Z0-9]{3,12}$/.test(code)){ msg.innerHTML = errSpan('Mã đề chỉ gồm chữ và số.'); return; }
+  msg.innerHTML = '<span class="hint">Đang kiểm tra…</span>';
+  try {
+    const E = await S.be.get('exams', code);
+    S.st = { code, exam: E };
+    render();
+    if (!E){ $('#code-msg').innerHTML = errSpan(`Không tìm thấy đề có mã ${code}. Kiểm tra lại mã với giáo viên.`); $('#code').focus(); return; }
+    const n = $('#st-name'); if (n) n.focus();
+  } catch(e){ msg.innerHTML = errSpan('Không kết nối được hệ thống: ' + (e.message || e)); }
+}
+const subDoc = (s, E) => ({ code: s.code, name: s.name, cls: s.cls, status: 'doing', answers: s.answers, answered: countAnswered(E, s.answers), total: E.questions.length, violations: s.violations, startedAt: s.startedAt, endAt: s.endAt, updatedAt: Date.now(), device: s.device });
+async function begin(){
+  const E = S.st.exam; if (!E) return;
+  const name = $('#st-name').value.trim().replace(/\s+/g, ' '), cls = $('#st-cls').value.trim();
+  const err = $('#st-err');
+  if (!name){ err.textContent = 'Nhập họ và tên để bắt đầu.'; $('#st-name').focus(); return; }
+  let fresh = E;
+  try { fresh = await S.be.get('exams', E.code) || E; } catch(e){}
+  const g = gate(fresh); if (g){ err.textContent = g; return; }
+  if (!await modal({ title: 'Bắt đầu làm bài?', body: `${name}${cls ? ', lớp ' + cls : ''}. Thời gian ${fresh.duration} phút, tính từ lúc bấm Bắt đầu.`, ok: 'Bắt đầu' })) return;
+  LS.set('tt_login_' + E.code, (+LS.get('tt_login_' + E.code) || 0) + 1);
+  LS.setJSON('tt_student', { name, cls });
+  const now = Date.now();
+  const sess = { subId: E.code + '_' + rid(10), code: E.code, name, cls, startedAt: now, endAt: now + fresh.duration * 60000, answers: {}, violations: 0, idx: 0, status: 'doing', device: deviceId() };
+  saveSess(sess);
+  try { await S.be.set('subs', sess.subId, subDoc(sess, fresh)); }
+  catch(e){ toast('Chưa kết nối được máy chủ. Bài làm vẫn lưu trên máy và sẽ gửi khi nộp.', 'err'); }
+  enterExam(fresh, sess);
+}
+async function resumeSess(){
+  const E = S.st.exam, sess = loadSess(E.code); if (!sess) return render();
+  if (E.preventReload){
+    const used = +LS.get('tt_login_' + E.code) || 0;
+    if (E.maxLogins > 0 && used >= E.maxLogins) return finalize(E, sess, 'locked');
+    LS.set('tt_login_' + E.code, used + 1);
+  }
+  enterExam(E, sess);
+}
+function enterExam(E, sess){
+  S.x = { exam: E, sess, away: false, writing: false, pending: false, submitting: false, syncT: null };
+  LS.set('tt_active', E.code);
+  S.role = 'student';
+  clearInterval(S.xTick); S.xTick = setInterval(xTick, 1000);
+  go('exam');
+  E.questions.forEach(q => q.q.forEach(imgUrl));
+  pushSub(true);
+}
+function examView(){ return `<div class="wrap"><div class="exam"><section class="panel" id="qpane" aria-live="polite"></section><aside class="sheet" id="sheet" aria-label="Phiếu trả lời"></aside></div></div>`; }
+function fillQ(){
+  const { exam: E, sess } = S.x; const q = E.questions[sess.idx]; const a = sess.answers[q.n];
+  const imgs = q.q.length ? q.q.map((r, i) => `<img class="qimg" data-ref="${esc(r)}" alt="Đề câu ${q.n}${q.q.length > 1 ? ', phần ' + (i + 1) : ''}">`).join('') : `<p class="hint">Câu này không có ảnh đề.</p>`;
+  let zone;
+  if (q.type === 'mc') zone = `<div class="bubbles" role="group" aria-label="Chọn đáp án câu ${q.n}">${'ABCD'.split('').map(L => `<button class="bubble" data-act="mc" data-v="${L}" aria-pressed="${a === L}">${L}</button>`).join('')}</div>`;
+  else if (q.type === 'tf'){ const arr = Array.isArray(a) ? a : [null, null, null, null]; zone = 'abcd'.split('').map((l, i) => `<div class="tf-row" role="group" aria-label="Ý ${l}"><span class="tf-label">${l})</span>${['Đ', 'S'].map(v => `<button class="bubble" data-act="tf" data-i="${i}" data-v="${v}" aria-pressed="${arr[i] === v}" aria-label="Ý ${l}: ${v === 'Đ' ? 'Đúng' : 'Sai'}">${v}</button>`).join('')}</div>`).join(''); }
+  else zone = `<label class="field">Nhập đáp số<input class="input sa-input" id="sa" inputmode="decimal" autocomplete="off" value="${esc(a || '')}" placeholder="VD: -1,5"></label>`;
+  const last = sess.idx === E.questions.length - 1;
+  $('#qpane').innerHTML = `<div class="qhead"><span class="qnum">Câu ${q.n}</span><span class="qtype">${TYPE_LABEL[q.type]}</span></div>${imgs}<div class="answer-zone">${zone}</div>
+    <div class="qnav"><button class="btn" data-act="prev" ${sess.idx === 0 ? 'disabled' : ''}>Câu trước</button>${last ? `<button class="btn primary" data-act="submit">Nộp bài</button>` : `<button class="btn primary" data-act="next">Câu tiếp</button>`}</div>`;
+  hydrate($('#qpane'));
+  const sa = $('#sa');
+  if (sa) sa.addEventListener('input', () => { const v = sa.value; if (v.trim()) sess.answers[q.n] = v; else delete sess.answers[q.n]; changed(); });
+}
+function fillSheet(){
+  const { exam: E, sess } = S.x;
+  const cls = q => { const a = sess.answers[q.n]; return isFull(q, a) ? 'done' : isPart(q, a) ? 'part' : ''; };
+  const done = countAnswered(E, sess.answers);
+  $('#sheet').innerHTML = `<div class="sheet-h">Phiếu trả lời</div><span class="hint">${esc(sess.name)}${sess.cls ? ', lớp ' + esc(sess.cls) : ''}</span>
+    <div class="gridn">${E.questions.map((q, i) => `<button class="gn ${cls(q)} ${i === sess.idx ? 'cur' : ''}" data-act="goto" data-i="${i}" aria-label="Câu ${q.n}${cls(q) === 'done' ? ', đã làm' : cls(q) === 'part' ? ', làm dở' : ''}" ${i === sess.idx ? 'aria-current="true"' : ''}>${q.n}</button>`).join('')}</div>
+    <div class="legend"><span><i class="l-done"></i>Đã làm</span><span><i class="l-part"></i>Làm dở</span><span><i class="l-none"></i>Chưa làm</span></div>
+    <p class="hint">Đã làm ${done}/${E.questions.length} câu.</p>
+    <button class="btn primary wide" data-act="submit">Nộp bài</button>`;
+}
+function changed(){ saveSess(S.x.sess); fillSheet(); pushSub(false); }
+function moveTo(i){
+  const { exam: E, sess } = S.x; if (i < 0 || i >= E.questions.length) return;
+  sess.idx = i; saveSess(sess); fillQ(); fillSheet();
+  const p = $('#qpane'); if (p.getBoundingClientRect().top < 70) p.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+}
+function xTick(){
+  const x = S.x; if (!x || x.submitting) return;
+  const left = (x.sess.endAt - Date.now()) / 1000;
+  const t = $('#xtimer'); if (t){ t.textContent = fmtClock(left); t.classList.toggle('low', left <= 300); }
+  if (left <= 0) finalize(x.exam, x.sess, 'timeout');
+}
+function pushSub(now){ const x = S.x; if (!x) return; clearTimeout(x.syncT); x.syncT = setTimeout(syncNow, now ? 0 : 1500); }
+async function syncNow(){
+  const x = S.x; if (!x || x.submitting) return;
+  if (x.writing){ x.pending = true; return; }
+  x.writing = true;
+  try { await S.be.set('subs', x.sess.subId, subDoc(x.sess, x.exam)); } catch(e){}
+  x.writing = false;
+  if (x.pending && !x.submitting){ x.pending = false; syncNow(); }
+}
+function onAway(){
+  const x = S.x; if (S.view !== 'exam' || !x || x.away || x.submitting) return;
+  x.away = true; x.sess.violations++; saveSess(x.sess); pushSub(true);
+  const v = $('#xvio'); if (v){ v.textContent = 'Vi phạm: ' + x.sess.violations; v.classList.add('bad'); }
+}
+function onBack(){
+  const x = S.x; if (S.view !== 'exam' || !x || !x.away) return;
+  x.away = false;
+  if (!$('.modal-bg')) modal({ title: 'Cảnh báo vi phạm', body: `Bạn vừa rời khỏi trang làm bài. Số lần vi phạm: ${x.sess.violations}. Giáo viên sẽ thấy số lần này.`, ok: 'Tiếp tục làm bài', cancel: '' });
+}
+async function submitExam(){
+  const x = S.x; if (!x || x.submitting) return;
+  const blanks = x.exam.questions.filter(q => !isFull(q, x.sess.answers[q.n])).map(q => q.n);
+  const ok = await modal({ title: 'Nộp bài?', body: blanks.length ? `Đang bỏ trống hoặc làm dở: câu ${blanks.join(', ')}. Sau khi nộp không sửa được bài.` : 'Bạn đã làm hết các câu. Sau khi nộp không sửa được bài.', ok: 'Nộp bài', kind: blanks.length ? 'danger' : 'primary' });
+  if (!ok || !S.x || S.x.submitting) return;
+  finalize(x.exam, x.sess, 'manual');
+}
+async function finalize(E, sess, reason){
+  if (S.x){ S.x.submitting = true; clearTimeout(S.x.syncT); }
+  clearInterval(S.xTick);
+  closeModals();
+  while (S.x && S.x.writing) await sleep(100);
+  sess.status = 'submitting'; sess.reason = reason; sess.submittedAt = sess.submittedAt || Math.min(Date.now(), sess.endAt);
+  saveSess(sess);
+  S.done = { exam: E, sess, reason, state: 'sending' };
+  go('result');
+  sendResult();
+}
+async function sendResult(){
+  const { exam: E, sess, reason } = S.done;
+  try {
+    const key = await S.be.get('keys', E.code);
+    if (!key) throw new Error('Không tải được đáp án của đề.');
+    const g = grade(E, key, sess.answers);
+    const doc = { ...subDoc(sess, E), status: 'done', submittedAt: sess.submittedAt, reason, score: g.score, max: g.max, correct: g.correct, perQ: g.perQ };
+    await S.be.set('subs', sess.subId, doc);
+    LS.del('tt_sess_' + E.code); LS.del('tt_active');
+    LS.setJSON('tt_done_' + E.code, { subId: sess.subId, at: sess.submittedAt });
+    S.x = null;
+    S.done = { exam: E, sess, reason, state: 'sent', g, key, doc };
+  } catch(e){
+    S.done.state = 'error'; S.done.err = e.message || String(e);
+  }
+  if (S.view === 'result') render();
+}
+function resultView(){
+  const d = S.done;
+  if (!d) return '';
+  if (d.state === 'sending') return `<div class="wrap narrow"><div class="boot"><p class="lede" role="status">Đang nộp bài…</p></div></div>`;
+  if (d.state === 'error') return `<div class="wrap narrow"><h1>Chưa gửi được bài</h1><p class="lede">${esc(d.err)} Bài làm vẫn lưu trên máy này. Kiểm tra mạng rồi bấm Gửi lại.</p><button class="btn primary big" data-act="resend">Gửi lại</button></div>`;
+  const { exam: E, g, key, doc } = d;
+  const why = d.reason === 'timeout' ? ' Hết giờ, bài được nộp tự động.' : d.reason === 'locked' ? ' Bài được nộp vì đã hết lượt vào lại.' : '';
+  return `<div class="wrap mid">
+    <div class="ok-banner" role="status"><span class="check-bubble" aria-hidden="true">✓</span><div><strong>${d.reason === 'past' ? 'Bài làm đã nộp' : 'Bài làm đã được ghi nhận.'}</strong><span class="hint">${esc(doc.name)}${doc.cls ? ', lớp ' + esc(doc.cls) : ''}. ${esc(E.title)}. Nộp lúc ${fmtDate(doc.submittedAt)}.${why}</span></div></div>
+    ${E.showScore ? `<div class="score" aria-label="Điểm ${fmtNum(g.score)} trên ${fmtNum(g.max)}">${fmtNum(g.score)}<small> / ${fmtNum(g.max)}</small></div><p class="lede">Đúng hoàn toàn ${g.correct}/${g.total} câu. Số lần vi phạm: ${doc.violations || 0}.</p>` : `<p class="big-note">Điểm số sẽ được giáo viên công bố sau.</p>`}
+    <button class="btn" data-act="exit">Thoát</button>
+    ${E.showAnswers ? `<h2 style="margin-top:36px">Chi tiết bài làm</h2>${g.items.map(it => reviewHTML(it, key, E.showScore)).join('')}` : ''}
+  </div>`;
+}
+function reviewHTML(it, key, showScore){
+  const q = it.q; const cls = it.ok ? 'ok' : (q.type === 'tf' && it.nOk > 0) ? 'part' : 'bad';
+  const verdict = q.type === 'tf' ? `Đúng ${it.nOk}/4 ý` : it.ok ? 'Đúng' : isFull(q, it.a) ? 'Sai' : 'Bỏ trống';
+  const sol = (key.sol && key.sol[q.n]) || [];
+  return `<article class="rv"><div class="qhead"><span class="qnum">Câu ${q.n}</span><span class="mark ${cls}">${verdict}${showScore ? `, +${fmtNum(it.pts)} điểm` : ''}</span></div>
+    ${q.q.map(r => `<img class="qimg" data-ref="${esc(r)}" alt="Đề câu ${q.n}" loading="lazy">`).join('')}
+    <dl class="ansline"><dt>Bạn trả lời</dt><dd>${esc(fmtAns(q, it.a))}</dd><dt>Đáp án đúng</dt><dd>${esc(it.k)}</dd></dl>
+    ${sol.length ? `<details><summary>Xem lời giải</summary>${sol.map(r => `<img class="qimg" data-ref="${esc(r)}" alt="Lời giải câu ${q.n}" loading="lazy">`).join('')}</details>` : ''}
+  </article>`;
+}
+async function viewPast(){
+  const E = S.st.exam, done = LS.getJSON('tt_done_' + E.code); if (!done) return;
+  try {
+    const [doc, key] = await Promise.all([S.be.get('subs', done.subId), S.be.get('keys', E.code)]);
+    if (!doc || !key) throw new Error('Không tìm thấy bài đã nộp.');
+    S.done = { exam: E, state: 'sent', g: grade(E, key, doc.answers || {}), key, doc, reason: 'past' };
+    go('result');
+  } catch(e){ toast(e.message || String(e), 'err'); }
+}
+
+/* ---------------- sự kiện ---------------- */
+document.addEventListener('click', e => {
+  const im = e.target.closest('.qimg[src]');
+  if (im){ const v = document.createElement('div'); v.className = 'imgview'; v.setAttribute('role', 'dialog'); v.setAttribute('aria-label', 'Ảnh phóng to, chạm để đóng'); v.tabIndex = -1; const c = new Image(); c.src = im.src; c.alt = im.alt; v.appendChild(c); const close = () => { v.remove(); document.removeEventListener('keydown', k, true); }; const k = ev => { if (ev.key === 'Escape'){ ev.preventDefault(); close(); } }; v.addEventListener('click', close); document.addEventListener('keydown', k, true); document.body.appendChild(v); v.focus(); }
+});
+document.addEventListener('click', async e => {
+  const el = e.target.closest('[data-act]'); if (!el || el.disabled) return;
+  const A = el.dataset.act;
+  const x = S.x;
+  switch (A){
+    case 'home': if (S.view === 'exam') return; S.role = null; go('home'); break;
+    case 'role-teacher': openTeacher(); break;
+    case 'role-student': S.role = 'student'; go('student'); break;
+    case 'ttab': stopLive(); S.ttab = el.dataset.k; render(); if (S.ttab !== 'create') loadExams(); break;
+    case 'import': doImport(); break;
+    case 'q-add': addQ(); break;
+    case 'q-del': delQ(+el.dataset.i); break;
+    case 'publish': publish(); break;
+    case 'live-start': startLive(); break;
+    case 'zoom': { const z = +el.dataset.z; S.live.zoom = z === 0 ? 1 : Math.min(1.6, Math.max(0.6, Math.round((S.live.zoom + z * 0.1) * 10) / 10)); const zv = $('#zv'); if (zv) zv.textContent = Math.round(S.live.zoom * 100) + '%'; paintLive(); break; }
+    case 'res-load': loadResults(el.dataset.code); break;
+    case 'export': exportExcel(); break;
+    case 'del-exam': deleteExam(el.dataset.code); break;
+    case 'rate': { const i = +el.dataset.i; S.res.sel = S.res.sel === i ? null : i; $$('.qcol').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.i === S.res.sel))); $('#rate-detail').innerHTML = rateDetail(S.res.sel == null ? i : S.res.sel); break; }
+    case 'check-code': checkCode(); break;
+    case 'begin': begin(); break;
+    case 'resume': resumeSess(); break;
+    case 'force-submit': { const E = S.st.exam, s = loadSess(E.code); if (s && await modal({ title: 'Nộp phần đã làm?', body: `Nộp bài của ${s.name} với các câu đã lưu trên máy này.`, ok: 'Nộp bài' })) { S.x = null; finalize(E, s, 'saved'); } break; }
+    case 'view-past': viewPast(); break;
+    case 'mc': if (x){ const q = x.exam.questions[x.sess.idx]; const v = el.dataset.v; if (x.sess.answers[q.n] === v) delete x.sess.answers[q.n]; else x.sess.answers[q.n] = v; $$('[data-act="mc"]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === x.sess.answers[q.n]))); changed(); } break;
+    case 'tf': if (x){ const q = x.exam.questions[x.sess.idx]; const arr = Array.isArray(x.sess.answers[q.n]) ? [...x.sess.answers[q.n]] : [null, null, null, null]; const i = +el.dataset.i; arr[i] = arr[i] === el.dataset.v ? null : el.dataset.v; if (arr.every(v => !v)) delete x.sess.answers[q.n]; else x.sess.answers[q.n] = arr; $$(`[data-act="tf"][data-i="${i}"]`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === arr[i]))); changed(); } break;
+    case 'prev': if (x) moveTo(x.sess.idx - 1); break;
+    case 'next': if (x) moveTo(x.sess.idx + 1); break;
+    case 'goto': if (x) moveTo(+el.dataset.i); break;
+    case 'submit': submitExam(); break;
+    case 'resend': S.done.state = 'sending'; render(); sendResult(); break;
+    case 'exit': S.done = null; if (S.st.exam){ try { S.st.exam = await S.be.get('exams', S.st.exam.code) || S.st.exam; } catch(err){} } go('student'); break;
+  }
+});
+function onField(e){
+  const t = e.target, d = S.draft;
+  if (t.dataset.d !== undefined){ const k = t.dataset.d; d[k] = t.type === 'checkbox' ? t.checked : t.value; if (k === 'teacher') t.setAttribute('aria-invalid', String(!t.value.trim())); }
+  else if (t.dataset.sc !== undefined) d.scoring[t.dataset.sc] = t.value;
+  else if (t.dataset.q !== undefined){
+    const i = +t.dataset.i, q = d.questions[i]; if (!q) return;
+    if (t.dataset.q === 'type'){ q.type = t.value; q.manual = true; }
+    else { q.answer = t.value; if (!q.manual){ const ty = detectType(t.value); if (ty && ty !== q.type){ q.type = ty; const sel = $(`select[data-q="type"][data-i="${i}"]`); if (sel) sel.value = ty; } } }
+    const inp = $(`input[data-q="answer"][data-i="${i}"]`); if (inp) inp.placeholder = PLACEHOLDER[q.type];
+    const er = $('#qerr-' + i); if (er) er.textContent = answerError(q);
+  }
+}
+document.addEventListener('input', onField);
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 'f-excel'){ S.draft.excelFile = t.files[0] || null; $('#f-excel-name').textContent = S.draft.excelFile ? S.draft.excelFile.name : 'Chưa chọn file'; return; }
+  if (t.id === 'f-imgs'){ S.draft.imageFiles = [...t.files]; $('#f-imgs-name').textContent = t.files.length ? `${t.files.length} file đã chọn` : 'Chưa chọn file'; return; }
+  if (t.dataset.slot){
+    const q = S.draft.questions[+t.dataset.i]; if (!q || !t.files.length) return;
+    const key = t.dataset.slot === 'q' ? 'qImgs' : 'sImgs';
+    q[key].forEach(x => URL.revokeObjectURL(x.url));
+    q[key] = [...t.files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).map(f => ({ blob: f, url: URL.createObjectURL(f) }));
+    refreshQList(); return;
+  }
+  onField(e);
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || e.defaultPrevented) return;
+  const id = e.target.id;
+  if (id === 'code'){ e.preventDefault(); checkCode(); }
+  else if (id === 'st-name' || id === 'st-cls'){ e.preventDefault(); begin(); }
+});
+document.addEventListener('mouseover', e => { const c = e.target.closest('.qcol'); if (c && $('#rate-detail')) $('#rate-detail').innerHTML = rateDetail(+c.dataset.i); });
+document.addEventListener('focusin', e => { const c = e.target.closest && e.target.closest('.qcol'); if (c && $('#rate-detail')) $('#rate-detail').innerHTML = rateDetail(+c.dataset.i); });
+document.addEventListener('mouseout', e => { const ch = e.target.closest && e.target.closest('#rate-chart'); if (ch && !ch.contains(e.relatedTarget) && $('#rate-detail')) $('#rate-detail').innerHTML = rateDetail(S.res.sel); });
+document.addEventListener('visibilitychange', () => document.hidden ? onAway() : onBack());
+window.addEventListener('blur', onAway);
+window.addEventListener('focus', onBack);
+window.addEventListener('beforeunload', e => { if (S.view === 'exam' && S.x && !S.x.submitting){ e.preventDefault(); e.returnValue = ''; } });
+
+/* ---------------- khởi động ---------------- */
+(async () => {
+  render();
+  try { S.be = await initBackend(); }
+  catch(e){ S.fatal = (e && e.message) || String(e); S.view = 'fatal'; render(); return; }
+  const active = LS.get('tt_active');
+  if (active){
+    let E = null; try { E = await S.be.get('exams', active); } catch(e){}
+    const sess = loadSess(active);
+    if (E && sess){
+      S.role = 'student'; S.st = { code: active, exam: E };
+      if (sess.status === 'submitting'){ S.done = { exam: E, sess, reason: sess.reason || 'manual', state: 'sending' }; go('result'); sendResult(); return; }
+      if (!E.preventReload && Date.now() < sess.endAt){ enterExam(E, sess); return; }
+      go('student'); return;
+    }
+    LS.del('tt_active');
+  }
+  go('home');
+})();
+</script>
+</body>
+</html>
