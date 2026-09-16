@@ -264,6 +264,14 @@ textarea.input{resize:vertical;min-height:120px;line-height:1.5;font-family:inhe
 .flags{display:flex;gap:8px 22px;flex-wrap:wrap;margin-top:10px}
 .flags .check{font-size:14px}
 
+.pick{border:1px solid var(--line);border-radius:10px;padding:12px 16px 14px;margin:16px 0 0}
+.pick legend{font-weight:700;font-size:14px;padding:0 6px}
+.pick-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px 18px;max-height:280px;overflow:auto;padding:4px 2px}
+.pick .check{font-size:15px}
+.set-box{border-color:var(--pen)}
+.set-box .mine{border-top-color:var(--line)}
+.status-wait{color:var(--muted);font-weight:600}
+
 /* modal & toast */
 .modal-bg{position:fixed;inset:0;z-index:60;background:color-mix(in srgb,#0A0F1A 55%,transparent);display:grid;place-items:center;padding:16px}
 .modal{width:min(460px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--surface);border:2px solid var(--ink);border-radius:12px;padding:22px}
@@ -702,10 +710,10 @@ async function openTeacher(){
 
 /* ---------------- giáo viên ---------------- */
 function teacherView(){
-  const tabs = [['create', 'Tạo đề'], ['manage', 'Quản lý đề'], ['live', 'Theo dõi trực tiếp'], ['results', 'Kết quả'], ['preview', 'Xem như học sinh']];
+  const tabs = [['create', 'Tạo đề'], ['manage', 'Quản lý đề'], ['live', 'Theo dõi trực tiếp'], ['results', 'Kết quả'], ['psets', 'Bài luyện tập'], ['preview', 'Xem như học sinh']];
   return `<div class="wrap">${modeNotice()}<nav class="subtabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" class="subtab" aria-selected="${S.ttab === k}" data-act="ttab" data-k="${k}">${l}</button>`).join('')}</nav><div id="tpanel">${tpanelHTML()}</div></div>`;
 }
-const tpanelHTML = () => S.ttab === 'create' ? createTab() : S.ttab === 'live' ? liveTab() : S.ttab === 'preview' ? previewTab() : S.ttab === 'manage' ? manageTab() : resultsTab();
+const tpanelHTML = () => S.ttab === 'create' ? createTab() : S.ttab === 'live' ? liveTab() : S.ttab === 'preview' ? previewTab() : S.ttab === 'manage' ? manageTab() : S.ttab === 'psets' ? psetTab() : resultsTab();
 function manageTab(){
   if (!S.exams.length) return `<section class="block"><h2>Quản lý đề</h2><div class="empty">Chưa có đề nào. Tạo đề ở mục “Tạo đề”.</div></section>`;
   const now = Date.now();
@@ -1408,7 +1416,7 @@ async function exportAll(btn){
   if (!window.XLSX){ toast('Không tải được thư viện Excel. Kiểm tra mạng rồi tải lại trang.', 'err'); return; }
   const old = btn.textContent; btn.disabled = true; btn.textContent = 'Đang gom dữ liệu…';
   try {
-    const [exams, subsAll, prac] = await Promise.all([S.be.list('exams'), S.be.list('subs'), S.be.list('practice')]);
+    const [exams, subsAll, prac, psets, pres] = await Promise.all([S.be.list('exams'), S.be.list('subs'), S.be.list('practice'), S.be.list('psets'), S.be.list('presults')]);
     if (!exams.length) throw new Error('Chưa có đề nào để sao lưu.');
     exams.sort((a, b) => a.createdAt - b.createdAt);
     const byCode = new Map(exams.map(e => [e.code, e]));
@@ -1441,6 +1449,10 @@ async function exportAll(btn){
     add(all, 'Tất cả bài nộp', [9, 28, 17, 24, 8, 7, 10, 14, 11, 11, 8, 17, 17, 22, 40]);
     add(list, 'Danh sách đề', [9, 30, 20, 8, 14, 10, 17, 11, 14]);
     add(pr, 'Luyện tập', [24, 24, 17]);
+    const setById = new Map(psets.map(x => [x.id, x]));
+    const pres2 = [['Bài luyện tập', 'Mở lúc', 'Đóng lúc', 'Họ tên', 'Số câu', 'Đã làm đúng', 'Số lần trả lời', 'Lần cuối'],
+      ...pres.filter(x => setById.has(x.setId)).sort((a, b) => (setById.get(a.setId).createdAt - setById.get(b.setId).createdAt) || String(a.name).localeCompare(String(b.name), 'vi')).map(x => { const st = setById.get(x.setId), v = Object.values(x.items || {}); return [st.title, st.openAt ? fmtDate(st.openAt) : 'Mở ngay', st.closeAt ? fmtDate(st.closeAt) : '', x.name, x.total || '', v.filter(y => y.ok).length, v.reduce((a, y) => a + (y.tries || 0), 0), fmtDate(x.updatedAt)]; })];
+    add(pres2, 'Bài luyện tập', [28, 17, 17, 24, 8, 12, 14, 17]);
     const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     const d = new Date();
     await S.be.save(`Sao_luu_ket_qua_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.xlsx`, new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
@@ -1456,12 +1468,13 @@ async function loadMine(){
   if (!nk){ S.h = { name, preview, error: 'Nhập họ tên để xem bài đã làm.' }; paintMine(); inp.focus(); return; }
   S.h = { name, preview, key: nk, loading: true }; paintMine();
   try {
-    const [a, b, pr] = await Promise.all([S.be.list('subs', 'nameKey', nk), S.be.list('subs', 'name', name), S.be.get('practice', nk)]);
+    const [a, b, pr, sets, progs] = await Promise.all([S.be.list('subs', 'nameKey', nk), S.be.list('subs', 'name', name), S.be.get('practice', nk), S.be.list('psets').catch(() => []), S.be.list('presults', 'nameKey', nk).catch(() => [])]);
     const latest = new Map();
     [...a, ...b].forEach(x => { if (x.status !== 'done') return; const c = latest.get(x.code); if (!c || x.submittedAt > c.submittedAt) latest.set(x.code, x); });
     const pairs = await Promise.all([...latest.values()].map(async sub => { const [exam, key] = await Promise.all([S.be.get('exams', sub.code), S.be.get('keys', sub.code)]); return { sub, exam, key }; }));
     const items = pairs.filter(x => x.exam).sort((x, y) => y.sub.submittedAt - x.sub.submittedAt);
-    S.h = { name: (items[0] && items[0].sub.name) || name, preview, key: nk, loaded: true, items, mastered: { ...((pr && pr.mastered) || {}) }, onlyNew: true, pick: 'all' };
+    S.h = { name: (items[0] && items[0].sub.name) || name, preview, key: nk, loaded: true, items, mastered: { ...((pr && pr.mastered) || {}) }, onlyNew: true, pick: 'all',
+      sets: sets.sort((x, y) => (x.openAt || x.createdAt) - (y.openAt || y.createdAt)), prog: Object.fromEntries(progs.map(g => [g.setId, { ...g, items: { ...(g.items || {}) } }])), cache: new Map() };
     if (!preview) LS.setJSON('tt_student', { ...(LS.getJSON('tt_student') || {}), name });
   } catch(e){ S.h = { name, preview, key: nk, error: 'Không tải được bài đã làm: ' + (e.message || e) }; }
   paintMine();
@@ -1485,7 +1498,7 @@ function mineHTML(){
   if (H.loading) return `<p class="hint" role="status" style="margin-top:12px">Đang tìm bài đã làm…</p>`;
   if (H.error) return `<p style="margin-top:10px">${errSpan(H.error)}</p>`;
   if (!H.loaded) return '';
-  if (!H.items.length) return `<div class="empty" style="margin-top:14px">Chưa tìm thấy bài nào đã nộp với tên “${esc(H.name)}”. Kiểm tra lại cách viết tên giống lúc vào thi.</div>`;
+  if (!H.items.length) return `<div class="empty" style="margin-top:14px">Chưa tìm thấy bài nào đã nộp với tên “${esc(H.name)}”. Kiểm tra lại cách viết tên giống lúc vào thi.</div>${setsHTML()}`;
   const all = wrongItems(false), fresh = wrongItems(true), pool = H.onlyNew ? fresh : all;
   const groups = new Map(); pool.forEach(w => { const g = groups.get(w.exam.code) || { t: w.exam.title, n: 0 }; g.n++; groups.set(w.exam.code, g); });
   const practice = all.length ? `<div class="practice-box"><h3 style="margin-top:0">Luyện lại câu sai</h3>
@@ -1497,7 +1510,7 @@ function mineHTML(){
     : `<p class="hint" style="margin-top:14px">Chưa có câu sai nào để luyện. Câu sai chỉ hiện ở các đề thầy cô đã cho xem đáp án.</p>`;
   const list = `<div class="mine">${H.items.map(({ sub, exam }) => `<div class="mine-row"><div><div class="mine-t">${esc(exam.title)}</div><span class="hint">Mã ${esc(exam.code)}, nộp lúc ${fmtDate(sub.submittedAt)}</span>${sub.comment ? `<div class="comment"><strong>Nhận xét:</strong> ${esc(sub.comment)}</div>` : ''}</div>
       <div class="row end">${exam.showScore ? `<span class="mine-score">${fmtNum(sub.score)} <small>/ ${fmtNum(sub.max != null ? sub.max : maxScore(exam))}</small></span>` : `<span class="hint">Chờ công bố điểm</span>`}${exam.showScore || exam.showAnswers ? `<button class="btn small" data-act="h-view" data-code="${esc(exam.code)}">Xem lại</button>` : ''}</div></div>`).join('')}</div>`;
-  return `<p class="hint" style="margin-top:14px">Tìm thấy ${H.items.length} đề đã nộp của ${esc(H.name)}.</p>${practice}<h3>Các bài đã nộp</h3>${list}`;
+  return `<p class="hint" style="margin-top:14px">Tìm thấy ${H.items.length} đề đã nộp của ${esc(H.name)}.</p>${setsHTML()}${practice}<h3>Các bài đã nộp</h3>${list}`;
 }
 function viewMine(code){
   const it = (S.h.items || []).find(x => x.exam.code === code); if (!it) return;
@@ -1505,10 +1518,10 @@ function viewMine(code){
   S.done = { exam: it.exam, state: 'sent', g: grade(it.exam, key, it.sub.answers || {}), key, doc: it.sub, reason: 'past', asStudent: !!S.h.preview };
   go('result');
 }
-function startPractice(list){
+function startPractice(list, set){
   if (!list){ const pick = ($('#p-pick') && $('#p-pick').value) || 'all'; S.h.pick = pick; list = wrongItems(S.h.onlyNew, pick); }
   if (!list.length){ toast('Không có câu nào để luyện.'); return; }
-  S.p = { list, idx: 0, ans: {}, res: {} };
+  S.p = { list, idx: 0, ans: {}, res: {}, set: set || null };
   if (!S.h.preview) S.role = 'student';
   go('practice');
 }
@@ -1517,10 +1530,10 @@ function practiceView(){
   if (P.finished){
     const tried = P.list.filter(w => P.res[w.id]), ok = P.list.filter(w => P.res[w.id] && P.res[w.id].ok), remain = P.list.filter(w => !(P.res[w.id] && P.res[w.id].ok));
     return `<div class="wrap mid"><h1>Kết quả luyện tập</h1>
-      <p class="lede">Lần này em làm đúng ${ok.length}/${P.list.length} câu${tried.length < P.list.length ? `, bỏ qua ${P.list.length - tried.length} câu` : ''}. Câu đã làm đúng sẽ không hiện lại khi chọn “Chỉ các câu chưa luyện đúng”.</p>
+      <p class="lede">Lần này em làm đúng ${ok.length}/${P.list.length} câu${tried.length < P.list.length ? `, bỏ qua ${P.list.length - tried.length} câu` : ''}.${P.set ? (() => { const pr = S.h.prog[P.set.id]; const done = pr ? Object.values(pr.items || {}).filter(v => v.ok).length : 0; return ` Cả bài “${esc(P.set.title)}”: đã làm đúng ${Math.min(done, P.set.total)}/${P.set.total} câu.${P.closed || done >= P.set.total ? '' : ' Lần sau bấm “Làm tiếp” để làm các câu còn lại.'}`; })() : ' Câu đã làm đúng sẽ không hiện lại khi chọn “Chỉ các câu chưa luyện đúng”.'}${P.closed ? ' Bài luyện tập đã đến giờ đóng.' : ''}</p>
       <div class="row">${remain.length ? `<button class="btn primary" data-act="p-again">Luyện lại ${remain.length} câu chưa đúng</button>` : ''}<button class="btn" data-act="p-exit">Về trang học sinh</button></div></div>`;
   }
-  return `<div class="wrap mid"><div class="row between" style="margin-top:22px"><div><strong>Luyện lại câu sai${S.h.preview ? ` của ${esc(S.h.name)} (giáo viên xem thử, không lưu)` : ''}</strong><span class="hint" id="p-count"></span></div><button class="btn small" data-act="p-exit">Kết thúc</button></div>
+  return `<div class="wrap mid"><div class="row between" style="margin-top:22px"><div><strong>${P.set ? 'Bài luyện tập: ' + esc(P.set.title) : 'Luyện lại câu sai'}${S.h.preview ? ` của ${esc(S.h.name)} (giáo viên xem thử, không lưu)` : ''}</strong><span class="hint" id="p-count"></span></div><button class="btn small" data-act="p-exit">Kết thúc</button></div>
     <div class="lbar" aria-hidden="true"><i id="p-bar"></i></div>
     <section class="panel" id="pcard" style="margin-top:10px;scroll-margin-top:80px"></section></div>`;
 }
@@ -1553,7 +1566,7 @@ function fillPRes(){
   if (!r){ el.innerHTML = ''; return; }
   const verdict = w.q.type === 'tf' ? (r.ok ? 'Đúng cả 4 ý' : `Đúng ${r.nOk}/4 ý`) : r.ok ? 'Đúng rồi' : 'Chưa đúng';
   el.innerHTML = `<div class="pres ${r.ok ? 'ok' : 'bad'}"><strong>${verdict}.</strong>
-    <dl class="ansline"><dt>Em trả lời</dt><dd>${esc(fmtAns(w.q, P.ans[w.id]))}</dd><dt>Đáp án đúng</dt><dd>${esc(w.k)}</dd><dt>Lúc thi em chọn</dt><dd>${esc(fmtAns(w.q, w.prev))}</dd></dl>
+    <dl class="ansline"><dt>Em trả lời</dt><dd>${esc(fmtAns(w.q, P.ans[w.id]))}</dd><dt>Đáp án đúng</dt><dd>${esc(w.k)}</dd><dt>Lúc thi em chọn</dt><dd>${w.untaken ? 'Em chưa làm đề này' : esc(fmtAns(w.q, w.prev))}</dd></dl>
     ${w.sol.length ? `<details ${r.ok ? '' : 'open'}><summary>Xem lời giải</summary>${w.sol.map(x => `<img class="qimg" data-ref="${esc(x)}" alt="Lời giải câu ${w.q.n}">`).join('')}</details>` : '<p class="hint">Câu này không có ảnh lời giải.</p>'}</div>`;
   hydrate(el);
 }
@@ -1577,6 +1590,7 @@ async function savePractice(){
 function pCheck(){
   const P = S.p, w = P.list[P.idx], a = P.ans[w.id];
   if (!isFull(w.q, a)) return;
+  if (P.set && P.set.closeAt && Date.now() > P.set.closeAt){ P.closed = true; P.finished = true; render(); window.scrollTo(0, 0); toast('Bài luyện tập đã đến giờ đóng.', 'err'); return; }
   let ok, nOk = null;
   if (w.q.type === 'mc') ok = a === w.k;
   else if (w.q.type === 'tf'){ nOk = 0; for (let i = 0; i < 4; i++) if (w.k && a[i] === w.k[i]) nOk++; ok = nOk === 4; }
@@ -1585,11 +1599,178 @@ function pCheck(){
   fillPZone(); fillPRes();
   $('#p-bar').style.width = Math.round(Object.keys(P.res).length / P.list.length * 100) + '%';
   if (ok && !S.h.preview && !S.h.mastered[w.id]){ S.h.mastered[w.id] = Date.now(); savePractice(); }
+  if (P.set && !S.h.preview){
+    const pr = S.h.prog[P.set.id]; const it = pr.items[w.id] || { ok: false, tries: 0 };
+    it.tries = (it.tries || 0) + 1; if (ok) it.ok = true; pr.items[w.id] = it;
+    saveSetProg(P.set.id);
+  }
 }
 function pMove(i){
   const P = S.p; if (i < 0 || i >= P.list.length) return;
   P.idx = i; fillP();
   const c = $('#pcard'); if (c.getBoundingClientRect().top < 70) c.scrollIntoView({ block: 'start' });
+}
+
+/* ---------------- bài luyện tập được giao ---------------- */
+const setState = (st, now = Date.now()) => st.openAt && now < st.openAt ? 'wait' : st.closeAt && now > st.closeAt ? 'closed' : 'open';
+function setCount(st){
+  const latest = new Map((S.h.items || []).map(it => [it.exam.code, it]));
+  let n = 0;
+  for (const c of st.codes || []){
+    const it = latest.get(c);
+    if (!it){ n += (st.counts && +st.counts[c]) || 0; continue; }
+    n += st.mode === 'all' ? it.exam.questions.length : it.exam.questions.filter((q, i) => !(it.sub.perQ && it.sub.perQ[i])).length;
+  }
+  return n;
+}
+function setsHTML(){
+  const H = S.h, now = Date.now();
+  const sets = (H.sets || []).filter(st => setState(st, now) !== 'closed');
+  if (!sets.length) return '';
+  return `<div class="practice-box set-box"><h3 style="margin-top:0">Bài luyện tập thầy cô giao</h3><div class="mine">${sets.map(st => {
+    const total = setCount(st), pr = H.prog[st.id];
+    const ok = pr ? Math.min(total, Object.values(pr.items || {}).filter(v => v.ok).length) : 0;
+    const wait = setState(st, now) === 'wait';
+    const when = wait ? `Mở lúc ${fmtDate(st.openAt)}` : `Đang mở${st.closeAt ? `, đóng lúc ${fmtDate(st.closeAt)}` : ''}`;
+    const btn = wait ? '<span class="hint">Chưa đến giờ</span>' : !total ? '<span class="hint">Không có câu nào</span>'
+      : `<button class="btn primary small" data-act="ps-start" data-id="${esc(st.id)}">${pr && ok >= total ? 'Làm lại từ đầu' : pr && ok > 0 ? 'Làm tiếp' : 'Bắt đầu'}</button>`;
+    return `<div class="mine-row"><div><div class="mine-t">${esc(st.title)}</div><span class="hint">${(st.codes || []).length} đề, ${total} câu${st.mode === 'wrong' ? ' em cần luyện' : ''}. ${when}.</span>${pr ? `<span class="hint">Đã làm đúng ${ok}/${total} câu.</span>` : ''}</div><div class="row end">${btn}</div></div>`;
+  }).join('')}</div><p class="hint" style="margin-top:8px">Đến giờ mở mà chưa thấy nút Bắt đầu, bấm “Xem bài đã làm” lần nữa để tải lại.</p></div>`;
+}
+async function examPair(code){
+  const c = S.h.cache || (S.h.cache = new Map());
+  if (!c.has(code)) c.set(code, Promise.all([S.be.get('exams', code), S.be.get('keys', code)]).then(([exam, key]) => ({ exam, key })));
+  return c.get(code);
+}
+async function setItems(st){
+  const latest = new Map((S.h.items || []).map(it => [it.exam.code, it]));
+  const out = [];
+  for (const code of st.codes || []){
+    const it = latest.get(code);
+    let exam, key, sub = null;
+    if (it){ exam = it.exam; key = it.key; sub = it.sub; } else { ({ exam, key } = await examPair(code)); }
+    if (!exam || !key || !key.answers) continue;
+    exam.questions.forEach((q, i) => {
+      if (st.mode === 'wrong' && sub && sub.perQ && sub.perQ[i]) return;
+      out.push({ id: code + '_' + q.n, exam, q, k: key.answers[q.n], sol: (key.sol && key.sol[q.n]) || [], prev: sub && sub.answers ? sub.answers[q.n] : undefined, untaken: !sub });
+    });
+  }
+  return out;
+}
+async function startSet(id){
+  const st = (S.h.sets || []).find(x => x.id === id); if (!st) return;
+  const now = Date.now();
+  if (setState(st, now) === 'wait'){ toast(`Bài luyện tập mở lúc ${fmtDate(st.openAt)}.`); return; }
+  if (setState(st, now) === 'closed'){ toast('Bài luyện tập đã đóng.', 'err'); paintMine(); return; }
+  let items;
+  try { items = await setItems(st); } catch(e){ toast('Không tải được câu hỏi: ' + (e.message || e), 'err'); return; }
+  if (!items.length){ toast('Bài luyện tập không có câu nào cho em.'); return; }
+  const pr = S.h.prog[st.id] || (S.h.prog[st.id] = { setId: st.id, items: {}, round: 1 });
+  let list = items.filter(w => !(pr.items[w.id] && pr.items[w.id].ok));
+  if (!list.length){ list = items; Object.values(pr.items).forEach(v => { v.ok = false; }); pr.round = (+pr.round || 1) + 1; }
+  pr.total = items.length;
+  startPractice(list, { id: st.id, title: st.title, closeAt: st.closeAt || null, total: items.length });
+}
+const progQ = { saving: false, dirty: new Set() };
+async function saveSetProg(id){
+  progQ.dirty.add(id);
+  if (progQ.saving) return;
+  progQ.saving = true;
+  while (progQ.dirty.size){
+    const sid = progQ.dirty.values().next().value; progQ.dirty.delete(sid);
+    const pr = S.h.prog[sid]; if (!pr || !S.h.key) continue;
+    try { await S.be.set('presults', `${sid}_${S.h.key}`, { setId: sid, name: S.h.name, nameKey: S.h.key, total: pr.total || 0, round: pr.round || 1, items: pr.items, updatedAt: Date.now() }); }
+    catch(e){ toast('Chưa lưu được tiến độ bài luyện tập.', 'err'); }
+  }
+  progQ.saving = false;
+}
+
+/* giáo viên */
+async function loadPsets(){
+  try { S.psets = (await S.be.list('psets')).sort((a, b) => b.createdAt - a.createdAt); }
+  catch(e){ S.psets = []; toast('Không tải được danh sách bài luyện tập.', 'err'); }
+  if (S.view === 'teacher' && S.ttab === 'psets') $('#tpanel').innerHTML = psetTab();
+}
+function psetTab(){
+  const sets = S.psets || [], now = Date.now();
+  const stTxt = st => ({ wait: '<span class="status-wait">Chưa mở</span>', open: '<span class="status-open">Đang mở</span>', closed: '<span class="status-closed">Đã đóng</span>' })[setState(st, now)];
+  const title = c => { const e = S.exams.find(x => x.code === c); return e ? e.title : `${c} (đã xoá)`; };
+  return `<section class="block"><h2>Giao bài luyện tập</h2>
+    <p class="hint" style="margin-bottom:14px">Chọn các đề muốn ôn và đặt giờ mở. Đến giờ, học sinh vào mục “Bài đã làm và luyện tập”, nhập họ tên là thấy bài. Mỗi câu làm xong được báo đúng/sai và xem lời giải ngay, không tính điểm. Học sinh làm dở có thể làm tiếp lần sau.</p>
+    ${S.exams.length ? `<div class="form-grid">
+      <label class="field">Tên bài luyện tập<input class="input" id="ps-title" placeholder="VD: Ôn tập tuần 3"></label>
+      <label class="field">Mở lúc (để trống nếu mở ngay)<input class="input" type="datetime-local" id="ps-open"></label>
+      <label class="field">Đóng lúc (tuỳ chọn)<input class="input" type="datetime-local" id="ps-close"></label>
+    </div>
+    <fieldset class="pick"><legend>Chọn đề: <span id="ps-count">0</span> đề</legend><div class="pick-grid">${S.exams.map(e => `<label class="check"><input type="checkbox" name="ps-code" value="${esc(e.code)}"><span>${esc(e.title)} <span class="hint" style="display:inline">(${esc(e.code)}, ${e.questions.length} câu)</span></span></label>`).join('')}</div></fieldset>
+    <fieldset class="pick"><legend>Nội dung</legend><div class="checks" style="margin:4px 0 0">
+      <label class="check"><input type="radio" name="ps-mode" value="wrong" checked><span>Chỉ các câu mỗi em đã làm sai. Đề em chưa làm thì lấy tất cả câu.</span></label>
+      <label class="check"><input type="radio" name="ps-mode" value="all"><span>Tất cả câu của các đề đã chọn</span></label></div></fieldset>
+    <div class="row" style="margin-top:16px"><button class="btn primary" data-act="ps-create">Giao bài luyện tập</button><span id="ps-msg" class="hint" role="status"></span></div>`
+    : `<div class="empty">Chưa có đề nào. Tạo đề trước rồi quay lại đây.</div>`}
+  </section>
+  <section class="block"><h2>Bài luyện tập đã giao</h2>
+    ${S.psets === undefined ? '<p class="hint" role="status">Đang tải…</p>' : sets.length ? `<div class="table-wrap"><table><thead><tr><th>Tên bài</th><th></th><th>Trạng thái</th><th>Các đề</th><th>Nội dung</th><th>Mở lúc</th><th>Đóng lúc</th></tr></thead><tbody>
+    ${sets.map(st => `<tr><td><strong>${esc(st.title)}</strong></td><td><div class="row nowrap"><button class="btn small" data-act="ps-prog" data-id="${esc(st.id)}">Tình hình</button><button class="btn small" data-act="ps-edit" data-id="${esc(st.id)}">Sửa giờ</button><button class="btn small danger" data-act="ps-del" data-id="${esc(st.id)}">Xoá</button></div></td><td>${stTxt(st)}</td><td style="white-space:normal;min-width:200px">${(st.codes || []).map(c => esc(title(c))).join(', ')}</td><td>${st.mode === 'all' ? 'Tất cả câu' : 'Câu làm sai'}</td><td>${st.openAt ? fmtDate(st.openAt) : 'Mở ngay'}</td><td>${st.closeAt ? fmtDate(st.closeAt) : '–'}</td></tr>`).join('')}
+    </tbody></table></div>` : '<div class="empty">Chưa giao bài luyện tập nào.</div>'}
+  </section>`;
+}
+async function createPset(){
+  const msg = $('#ps-msg'), btn = $('[data-act="ps-create"]');
+  const created = c => { const e = S.exams.find(x => x.code === c); return e ? e.createdAt : 0; };
+  const codes = $$('input[name="ps-code"]:checked').map(x => x.value).sort((x, y) => created(x) - created(y));
+  const title = $('#ps-title').value.trim(), openV = $('#ps-open').value, closeV = $('#ps-close').value;
+  const mode = ($('input[name="ps-mode"]:checked') || {}).value || 'wrong';
+  if (!codes.length){ msg.innerHTML = errSpan('Chọn ít nhất một đề.'); return; }
+  const openAt = openV ? new Date(openV).getTime() : null, closeAt = closeV ? new Date(closeV).getTime() : null;
+  if (closeAt && closeAt <= (openAt || Date.now())){ msg.innerHTML = errSpan('Giờ đóng phải sau giờ mở và sau thời điểm hiện tại.'); return; }
+  const counts = {}; codes.forEach(c => { const e = S.exams.find(x => x.code === c); counts[c] = e ? e.questions.length : 0; });
+  const id = 'P' + rid(9);
+  btn.disabled = true; msg.textContent = 'Đang lưu…';
+  try {
+    await S.be.set('psets', id, { id, title: title || `Luyện tập ${fmtDate(Date.now())}`, codes, counts, mode, openAt, closeAt, createdAt: Date.now(), teacher: LS.get('tt_teacher') || '' });
+    toast(openAt && openAt > Date.now() ? `Đã giao bài, mở lúc ${fmtDate(openAt)}.` : 'Đã giao bài luyện tập, học sinh làm được ngay.');
+    await loadPsets();
+  } catch(e){ msg.innerHTML = errSpan('Không lưu được: ' + (e.message || e)); btn.disabled = false; }
+}
+async function editPset(id){
+  const st = (S.psets || []).find(x => x.id === id); if (!st) return;
+  const html = `<div class="es-grid">
+    <label class="field full">Tên bài luyện tập<input class="input" id="pe-title" value="${esc(st.title)}"></label>
+    <label class="field">Mở lúc (để trống nếu mở ngay)<input class="input" type="datetime-local" id="pe-open" value="${toLocalInput(st.openAt)}"></label>
+    <label class="field">Đóng lúc (để trống nếu không đóng)<input class="input" type="datetime-local" id="pe-close" value="${toLocalInput(st.closeAt)}"></label></div>
+    <p class="hint" style="margin-top:12px">Tiến độ học sinh đã làm được giữ nguyên khi đổi giờ.</p>`;
+  const ok = await modal({ title: 'Sửa bài luyện tập', html, wide: true, ok: 'Lưu',
+    validate: async () => {
+      const title = $('#pe-title').value.trim(), openV = $('#pe-open').value, closeV = $('#pe-close').value;
+      if (!title) return 'Nhập tên bài luyện tập.';
+      const openAt = openV ? new Date(openV).getTime() : null, closeAt = closeV ? new Date(closeV).getTime() : null;
+      if (openAt && closeAt && closeAt <= openAt) return 'Giờ đóng phải sau giờ mở.';
+      try { const cur = await S.be.get('psets', id); if (!cur) return 'Không tìm thấy bài, có thể đã bị xoá.'; await S.be.set('psets', id, { ...cur, title, openAt, closeAt }); }
+      catch(e){ return 'Không lưu được: ' + (e.message || e); }
+      return '';
+    } });
+  if (ok){ toast('Đã lưu bài luyện tập.'); loadPsets(); }
+}
+async function delPset(id){
+  const st = (S.psets || []).find(x => x.id === id); if (!st) return;
+  if (!await modal({ title: 'Xoá bài luyện tập?', body: `Xoá “${st.title}” và tiến độ của học sinh trong bài này. Các đề gốc và kết quả thi không bị ảnh hưởng.`, ok: 'Xoá', kind: 'danger' })) return;
+  try {
+    const rows = await S.be.list('presults', 'setId', id);
+    for (const r of rows) await S.be.del('presults', r.id);
+    await S.be.del('psets', id);
+    toast('Đã xoá bài luyện tập.');
+    loadPsets();
+  } catch(e){ toast('Xoá chưa xong: ' + (e.message || e), 'err'); }
+}
+async function psetProgress(id){
+  const st = (S.psets || []).find(x => x.id === id); if (!st) return;
+  let rows;
+  try { rows = await S.be.list('presults', 'setId', id); } catch(e){ toast('Không tải được: ' + (e.message || e), 'err'); return; }
+  rows.sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi'));
+  const html = rows.length ? `<p class="hint" style="margin-bottom:10px">Chỉ hiện học sinh đã bắt đầu làm. “Số lần trả lời” đếm cả những lần làm lại câu sai.</p><div class="table-wrap"><table><thead><tr><th>Họ tên</th><th class="num">Đã làm đúng</th><th class="num">Số lần trả lời</th><th class="num">Lượt làm</th><th>Lần cuối</th></tr></thead><tbody>${rows.map(r => { const v = Object.values(r.items || {}); const ok = v.filter(x => x.ok).length; return `<tr><td>${esc(r.name)}</td><td class="num"><strong>${ok}/${r.total || '?'}</strong></td><td class="num">${v.reduce((a, x) => a + (x.tries || 0), 0)}</td><td class="num">${r.round || 1}</td><td>${fmtDate(r.updatedAt)}</td></tr>`; }).join('')}</tbody></table></div>`
+    : `<div class="empty">Chưa có học sinh nào bắt đầu bài này.</div>`;
+  await modal({ title: `Tình hình: ${st.title}`, html, wide: true, ok: 'Đóng', cancel: '' });
 }
 
 /* ---------------- sự kiện ---------------- */
@@ -1605,7 +1786,7 @@ document.addEventListener('click', async e => {
     case 'home': if (S.view === 'exam') return; S.role = null; if (S.h.preview) S.h = { name: '' }; go('home'); break;
     case 'role-teacher': openTeacher(); break;
     case 'role-student': S.role = 'student'; if (S.h.preview) S.h = { name: '' }; go('student'); break;
-    case 'ttab': stopLive(); S.ttab = el.dataset.k; render(); if (S.ttab !== 'create') loadExams(); break;
+    case 'ttab': stopLive(); S.ttab = el.dataset.k; render(); if (S.ttab !== 'create') loadExams(); if (S.ttab === 'psets') loadPsets(); break;
     case 'import': doImport(); break;
     case 'q-add': addQ(); break;
     case 'q-del': delQ(+el.dataset.i); break;
@@ -1646,7 +1827,12 @@ document.addEventListener('click', async e => {
     case 'p-prev': pMove(S.p.idx - 1); break;
     case 'p-next': pMove(S.p.idx + 1); break;
     case 'p-finish': S.p.finished = true; render(); window.scrollTo(0, 0); break;
-    case 'p-again': startPractice(S.p.list.filter(w => !(S.p.res[w.id] && S.p.res[w.id].ok))); break;
+    case 'p-again': startPractice(S.p.list.filter(w => !(S.p.res[w.id] && S.p.res[w.id].ok)), S.p.set); break;
+    case 'ps-start': startSet(el.dataset.id); break;
+    case 'ps-create': createPset(); break;
+    case 'ps-prog': psetProgress(el.dataset.id); break;
+    case 'ps-edit': editPset(el.dataset.id); break;
+    case 'ps-del': delPset(el.dataset.id); break;
     case 'p-exit': S.p = null; go(S.h.preview ? 'teacher' : 'student'); break;
     case 'exit': if (S.done && (S.done.preview || S.done.teacher || S.done.asStudent)){ S.done = null; go('teacher'); break; }
       S.done = null; if (S.st.exam){ try { S.st.exam = await S.be.get('exams', S.st.exam.code) || S.st.exam; } catch(err){} } go('student'); break;
@@ -1668,6 +1854,7 @@ document.addEventListener('input', onField);
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.dataset.flag){ setFlag(t.dataset.flag, t.checked, t); return; }
+  if (t.name === 'ps-code'){ const c = $('#ps-count'); if (c) c.textContent = $$('input[name="ps-code"]:checked').length; return; }
   if (t.id === 'p-only'){ S.h.onlyNew = t.checked; S.h.pick = 'all'; paintMine(); return; }
   if (t.id === 'p-pick'){ S.h.pick = t.value; return; }
   if (t.id === 'f-excel'){ S.draft.excelFile = t.files[0] || null; $('#f-excel-name').textContent = S.draft.excelFile ? S.draft.excelFile.name : 'Chưa chọn file'; return; }
