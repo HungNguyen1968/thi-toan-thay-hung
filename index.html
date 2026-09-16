@@ -266,7 +266,16 @@ textarea.input{resize:vertical;min-height:120px;line-height:1.5;font-family:inhe
 
 /* modal & toast */
 .modal-bg{position:fixed;inset:0;z-index:60;background:color-mix(in srgb,#0A0F1A 55%,transparent);display:grid;place-items:center;padding:16px}
-.modal{width:min(460px,100%);background:var(--surface);border:2px solid var(--ink);border-radius:12px;padding:22px}
+.modal{width:min(460px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--surface);border:2px solid var(--ink);border-radius:12px;padding:22px}
+.modal.wide{width:min(640px,100%)}
+.lactions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.lactions .btn{padding:4px 9px;font-size:13px}
+.extra-badge{font-size:12px;font-weight:700;color:var(--pen);margin-left:4px}
+.status-open{color:var(--green);font-weight:600}
+.status-closed{color:var(--red);font-weight:600}
+.status-wait{color:var(--muted);font-weight:600}
+.es-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 14px;margin:8px 0 4px}
+.es-grid .full{grid-column:1/-1}
 .modal h3{margin:0 0 10px;font-size:20px}
 .modal .input{margin:6px 0 4px}
 .modal .row.end{margin-top:16px}
@@ -404,7 +413,7 @@ function makeLocalBackend(){
       const rows = await tx('docs', 'readonly', s => s.getAll(IDBKeyRange.bound(col + '/', col + '/\uffff'))) || [];
       return rows.map(r => ({ ...r.data, id: r.id })).filter(d => field === undefined || d[field] === value);
     },
-    watch(col, field, value, cb){ const l = { col, fire: async () => cb(await be.list(col, field, value)) }; listeners.add(l); l.fire(); return () => listeners.delete(l); },
+    watch(col, field, value, cb, onErr){ const l = { col, fire: async () => cb(await be.list(col, field, value)) }; listeners.add(l); l.fire(); return () => listeners.delete(l); },
     async putImage(blob){ const id = rid(16); await tx('imgs', 'readwrite', s => s.put(blob, id)); return id; },
     async imageUrl(ref){ const b = await tx('imgs', 'readonly', s => s.get(ref)); return b ? URL.createObjectURL(b) : ''; },
     async delImage(ref){ await tx('imgs', 'readwrite', s => s.delete(ref)); },
@@ -421,8 +430,8 @@ function makeClaudeBackend(db, assets, downloads){
     async set(col, id, data){ await db.doc(`${col}/${id}`).set(JSON.parse(JSON.stringify(data))); },
     async del(col, id){ await db.doc(`${col}/${id}`).delete(); },
     async list(col, field, value){ const s = await q(col, field, value).get(); return s.docs.map(d => ({ ...d.data(), id: d.id })); },
-    watch(col, field, value, cb){
-      return q(col, field, value).onSnapshot(s => cb(s.docs.map(d => ({ ...d.data(), id: d.id }))), () => toast('Mất kết nối theo dõi. Bấm “Theo dõi ngay” để kết nối lại.', 'err'));
+    watch(col, field, value, cb, onErr){
+      return q(col, field, value).onSnapshot(s => cb(s.docs.map(d => ({ ...d.data(), id: d.id }))), () => (onErr ? onErr() : toast('Mất kết nối theo dõi. Bấm “Theo dõi ngay” để kết nối lại.', 'err')));
     },
     async putImage(blob){ if (!assets) throw new Error('Tài khoản này không có quyền tải ảnh lên.'); const r = await assets.upload(blob); return r.id; },
     async imageUrl(ref){ return '/_blob/' + ref; },
@@ -444,7 +453,7 @@ async function makeFirebaseBackend(cfg){
     async set(col, id, data){ await fs.collection(col).doc(id).set(JSON.parse(JSON.stringify(data))); },
     async del(col, id){ await fs.collection(col).doc(id).delete(); },
     async list(col, field, value){ const s = await q(col, field, value).get(); return s.docs.map(d => ({ ...d.data(), id: d.id })); },
-    watch(col, field, value, cb){ return q(col, field, value).onSnapshot(s => cb(s.docs.map(d => ({ ...d.data(), id: d.id }))), () => toast('Mất kết nối theo dõi. Bấm “Theo dõi ngay” để kết nối lại.', 'err')); },
+    watch(col, field, value, cb, onErr){ return q(col, field, value).onSnapshot(s => cb(s.docs.map(d => ({ ...d.data(), id: d.id }))), () => (onErr ? onErr() : toast('Mất kết nối theo dõi. Bấm “Theo dõi ngay” để kết nối lại.', 'err'))); },
     async putImage(blob){ const data = await blobToDataURL(blob); const id = rid(16); await fs.collection('images').doc(id).set({ data }); return id; },
     async imageUrl(ref){ const s = await fs.collection('images').doc(ref).get(); return s.exists ? s.data().data : ''; },
     async delImage(ref){ try { await fs.collection('images').doc(ref).delete(); } catch(e){} },
@@ -584,14 +593,21 @@ const S = {
   res: { code: '' }, st: { code: '', exam: null }, h: { name: '' }, p: null, x: null, xTick: null, done: null
 };
 const loadSess = code => LS.getJSON('tt_sess_' + code);
+const extraFor = (E, subId) => (E && E.extra && +E.extra[subId]) || 0;
+const endOf = s => s.endAt + (+s.extraMin || 0) * 60000;
+const resetTag = E => `${E.resetAll || 0}:${(E.resets && E.resets[deviceId()]) || 0}`;
+function usedLogins(E){ const tag = LS.get('tt_logintag_' + E.code) || '0:0'; return tag === resetTag(E) ? (+LS.get('tt_login_' + E.code) || 0) : 0; }
+function bumpLogin(E){ LS.set('tt_login_' + E.code, usedLogins(E) + 1); LS.set('tt_logintag_' + E.code, resetTag(E)); }
+function toLocalInput(ts){ if (!ts) return ''; const d = new Date(ts); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+function replaceExam(E){ const i = S.exams.findIndex(e => e.code === E.code); if (i >= 0) S.exams[i] = E; if (S.res.exam && S.res.exam.code === E.code) S.res.exam = E; }
 const saveSess = s => { if (!s.preview) LS.setJSON('tt_sess_' + s.code, s); };
 
 /* ---------------- hộp thoại ---------------- */
-function modal({ title, body = '', html = '', input = null, value = '', placeholder = '', ok = 'Đồng ý', cancel = 'Hủy', kind = 'primary', validate = null }){
+function modal({ title, body = '', html = '', input = null, value = '', placeholder = '', wide = false, ok = 'Đồng ý', cancel = 'Hủy', kind = 'primary', validate = null }){
   return new Promise(resolve => {
     const prev = document.activeElement;
     const el = document.createElement('div'); el.className = 'modal-bg';
-    el.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="m-t"><h3 id="m-t">${esc(title)}</h3>${body ? `<p>${esc(body)}</p>` : ''}${html}${input === 'textarea' ? `<textarea class="input" id="m-in" rows="5" aria-label="${esc(title)}" placeholder="${esc(placeholder)}">${esc(value)}</textarea>` : input ? `<input class="input" id="m-in" type="${input}" autocomplete="off" aria-label="${esc(title)}" value="${esc(value)}">` : ''}<div class="error" id="m-err" role="alert"></div><div class="row end">${cancel ? `<button class="btn" data-m="no">${esc(cancel)}</button>` : ''}<button class="btn ${kind}" data-m="yes">${esc(ok)}</button></div></div>`;
+    el.innerHTML = `<div class="modal${wide ? ' wide' : ''}" role="dialog" aria-modal="true" aria-labelledby="m-t"><h3 id="m-t">${esc(title)}</h3>${body ? `<p>${esc(body)}</p>` : ''}${html}${input === 'textarea' ? `<textarea class="input" id="m-in" rows="5" aria-label="${esc(title)}" placeholder="${esc(placeholder)}">${esc(value)}</textarea>` : input ? `<input class="input" id="m-in" type="${input}" autocomplete="off" aria-label="${esc(title)}" value="${esc(value)}">` : ''}<div class="error" id="m-err" role="alert"></div><div class="row end">${cancel ? `<button class="btn" data-m="no">${esc(cancel)}</button>` : ''}<button class="btn ${kind}" data-m="yes">${esc(ok)}</button></div></div>`;
     $('#modal-root').appendChild(el);
     const inp = $('#m-in', el);
     (inp || $('[data-m="yes"]', el)).focus();
@@ -686,10 +702,62 @@ async function openTeacher(){
 
 /* ---------------- giáo viên ---------------- */
 function teacherView(){
-  const tabs = [['create', 'Tạo đề'], ['live', 'Theo dõi trực tiếp'], ['results', 'Kết quả'], ['preview', 'Xem như học sinh']];
+  const tabs = [['create', 'Tạo đề'], ['manage', 'Quản lý đề'], ['live', 'Theo dõi trực tiếp'], ['results', 'Kết quả'], ['preview', 'Xem như học sinh']];
   return `<div class="wrap">${modeNotice()}<nav class="subtabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" class="subtab" aria-selected="${S.ttab === k}" data-act="ttab" data-k="${k}">${l}</button>`).join('')}</nav><div id="tpanel">${tpanelHTML()}</div></div>`;
 }
-const tpanelHTML = () => S.ttab === 'create' ? createTab() : S.ttab === 'live' ? liveTab() : S.ttab === 'preview' ? previewTab() : resultsTab();
+const tpanelHTML = () => S.ttab === 'create' ? createTab() : S.ttab === 'live' ? liveTab() : S.ttab === 'preview' ? previewTab() : S.ttab === 'manage' ? manageTab() : resultsTab();
+function manageTab(){
+  if (!S.exams.length) return `<section class="block"><h2>Quản lý đề</h2><div class="empty">Chưa có đề nào. Tạo đề ở mục “Tạo đề”.</div></section>`;
+  const now = Date.now();
+  const st = E => E.openAt && now < E.openAt ? '<span class="status-wait">Chưa mở</span>' : E.closeAt && now > E.closeAt ? '<span class="status-closed">Đã đóng</span>' : '<span class="status-open">Đang mở</span>';
+  return `<section class="block"><h2>Quản lý đề</h2>
+    <p class="hint" style="margin-bottom:14px">Bấm Cài đặt để đổi tên đề, thời gian làm bài, số lượt vào thi, giờ mở/đóng đề hoặc cấp lại lượt cho tất cả. Muốn cộng giờ hay cấp lại lượt cho riêng một em, dùng mục Theo dõi trực tiếp.</p>
+    <div class="table-wrap"><table><thead><tr><th>Tên đề</th><th></th><th>Mã</th><th>Trạng thái</th><th class="num">Số câu</th><th class="num">Thời gian</th><th class="num">Lượt mỗi thiết bị</th><th>Mở đề</th><th>Đóng đề</th><th>Tạo lúc</th></tr></thead><tbody>
+    ${S.exams.map(E => `<tr><td><strong>${esc(E.title)}</strong></td><td><div class="row nowrap"><button class="btn small" data-act="exam-edit" data-code="${esc(E.code)}">Cài đặt</button><button class="btn small danger" data-act="del-exam" data-code="${esc(E.code)}">Xoá đề</button></div></td><td class="code-inline">${esc(E.code)}</td><td>${st(E)}</td><td class="num">${E.questions.length}</td><td class="num">${E.duration} phút</td><td class="num">${E.maxLogins || 'Không giới hạn'}</td><td>${E.openAt ? fmtDate(E.openAt) : '–'}</td><td>${E.closeAt ? fmtDate(E.closeAt) : '–'}</td><td>${fmtDate(E.createdAt)}</td></tr>`).join('')}
+    </tbody></table></div></section>`;
+}
+async function editExam(code){
+  let E0 = null; try { E0 = await S.be.get('exams', code); } catch(e){}
+  if (!E0){ toast('Không tải được đề này.', 'err'); return; }
+  const chk = (id, on, text) => `<label class="check"><input type="checkbox" id="${id}" ${on ? 'checked' : ''}><span>${text}</span></label>`;
+  const html = `<div class="es-grid">
+      <label class="field full">Tên đề<input class="input" id="es-title" value="${esc(E0.title)}"></label>
+      <label class="field">Thời gian làm bài (phút)<input class="input" type="number" min="1" max="600" id="es-dur" value="${E0.duration}"></label>
+      <label class="field">Số lượt vào thi mỗi thiết bị<input class="input" type="number" min="0" max="99" id="es-max" value="${E0.maxLogins}"><span class="hint">0 là không giới hạn</span></label>
+      <label class="field">Mở đề (để trống nếu mở ngay)<input class="input" type="datetime-local" id="es-open" value="${toLocalInput(E0.openAt)}"></label>
+      <label class="field">Đóng đề (để trống nếu không đóng)<input class="input" type="datetime-local" id="es-close" value="${toLocalInput(E0.closeAt)}"></label>
+    </div>
+    <div class="checks" style="margin:14px 0 10px">
+      ${chk('es-prevent', E0.preventReload, 'Mỗi lần vào lại bài đang làm tính thêm một lượt')}
+      ${chk('es-score', E0.showScore, 'Cho học sinh xem điểm')}
+      ${chk('es-ans', E0.showAnswers, 'Cho xem đáp án, lời giải và luyện lại câu sai')}
+      ${chk('es-reset', false, '<strong>Cấp lại lượt vào thi cho tất cả thiết bị</strong> (học sinh đã hết lượt được vào thi lại)')}
+    </div>
+    <p class="hint">Thời gian làm bài mới áp dụng cho lượt vào thi bắt đầu sau khi lưu. Muốn cộng giờ cho em đang làm, dùng nút “+ Thêm giờ” ở mục Theo dõi trực tiếp.</p>`;
+  let saved = null;
+  const ok = await modal({
+    title: `Cài đặt đề ${code}`, html, wide: true, ok: 'Lưu cài đặt',
+    validate: async () => {
+      const title = $('#es-title').value.trim(), dur = Math.round(+$('#es-dur').value), maxL = $('#es-max').value.trim();
+      const openV = $('#es-open').value, closeV = $('#es-close').value;
+      if (!title) return 'Nhập tên đề.';
+      if (!(dur >= 1 && dur <= 600)) return 'Thời gian làm bài từ 1 đến 600 phút.';
+      if (maxL === '' || isNaN(+maxL) || +maxL < 0) return 'Số lượt phải là số từ 0 trở lên.';
+      const openAt = openV ? new Date(openV).getTime() : null, closeAt = closeV ? new Date(closeV).getTime() : null;
+      if (openAt && closeAt && closeAt <= openAt) return 'Giờ đóng đề phải sau giờ mở đề.';
+      try {
+        const E = await S.be.get('exams', code); if (!E) return 'Không tìm thấy đề, có thể đã bị xoá.';
+        Object.assign(E, { title, duration: dur, maxLogins: Math.round(+maxL), openAt, closeAt, preventReload: $('#es-prevent').checked, showScore: $('#es-score').checked, showAnswers: $('#es-ans').checked });
+        if ($('#es-reset').checked) E.resetAll = (+E.resetAll || 0) + 1;
+        await S.be.set('exams', code, E); replaceExam(E); saved = E;
+      } catch(e){ return 'Không lưu được: ' + (e.message || e); }
+      return '';
+    }
+  });
+  if (!ok || !saved) return;
+  toast('Đã lưu cài đặt đề ' + code + '.');
+  if (S.view === 'teacher' && S.ttab !== 'create'){ $('#tpanel').innerHTML = tpanelHTML(); if (S.ttab === 'live' && S.live.watching){ S.live.sig = ''; paintLive(true); } }
+}
 function previewTab(){
   return `<section class="block"><h2>Làm thử đề như học sinh</h2>
     <p class="hint" style="margin-bottom:14px">Mở đề đúng như học sinh thấy: đồng hồ, phiếu trả lời, cảnh báo khi nộp, chấm điểm và lời giải. Bài làm thử không được lưu, không tính lượt vào thi và không hiện trong theo dõi hay kết quả.</p>
@@ -898,27 +966,72 @@ function liveTab(){
 function startLive(){
   const code = $('#live-code') && $('#live-code').value; if (!code) return;
   stopLive();
-  Object.assign(S.live, { code, watching: code, ok: false, subs: [] });
+  Object.assign(S.live, { code, watching: code, ok: false, subs: [], sig: '' });
   $('#tpanel').innerHTML = liveTab();
   S.live.unsub = S.be.watch('subs', 'code', code, list => { S.live.subs = list; S.live.ok = true; paintLive(); });
-  S.live.tick = setInterval(paintLive, 1000);
+  S.live.tick = setInterval(() => paintLive(), 1000);
   paintLive();
 }
 function stopLive(){ if (S.live.unsub) S.live.unsub(); S.live.unsub = null; clearInterval(S.live.tick); S.live.watching = ''; }
-function paintLive(){
+function paintLive(force){
   const L = S.live, grid = $('#live-grid'); if (!grid) return;
   const E = S.exams.find(e => e.code === L.watching); const total = E ? E.questions.length : 0; const now = Date.now();
-  const rows = L.subs.map(s => { const doing = s.status !== 'done'; const left = (s.endAt - now) / 1000; return { ...s, doing, left, lost: doing && left < -120 }; })
+  const rows = L.subs.map(s => { const doing = s.status !== 'done'; const extra = extraFor(E, s.id); const left = (s.endAt + extra * 60000 - now) / 1000; return { ...s, doing, extra, left, lost: doing && left < -120 }; })
     .sort((a, b) => (b.doing - a.doing) || String(a.name).localeCompare(String(b.name), 'vi'));
   const doingN = rows.filter(r => r.doing && !r.lost).length, doneN = rows.filter(r => !r.doing).length;
   $('#live-dot').className = 'live-dot' + (L.ok ? ' on' : '');
   $('#live-status').innerHTML = L.ok ? `Đang cập nhật. Đang thi: <strong>${doingN}</strong> học sinh. Đã nộp: <strong>${doneN}</strong>.` : 'Đang kết nối…';
+  const stOf = r => !r.doing ? 'done' : r.lost ? 'lost' : 'doing';
+  const sig = JSON.stringify([L.zoom, total, E && E.maxLogins, rows.map(r => [r.id, stOf(r), r.answered, r.violations, r.score, r.extra, r.name, r.cls])]);
+  if (!force && sig === L.sig){
+    rows.forEach(r => { if (stOf(r) === 'doing'){ const el = grid.querySelector(`[data-left="${CSS.escape(r.id)}"]`); if (el) el.textContent = fmtClock(r.left); } });
+    return;
+  }
+  L.sig = sig;
   grid.innerHTML = rows.length ? `<div class="lgrid" style="zoom:${L.zoom}">${rows.map(r => {
-    const st = !r.doing ? 'done' : r.lost ? 'lost' : 'doing';
-    const foot = st === 'done' ? `Đã nộp ${fmtTime(r.submittedAt)}, ${fmtNum(r.score)} điểm` : st === 'lost' ? 'Hết giờ, chưa nộp bài' : `Còn ${fmtClock(r.left)}`;
+    const st = stOf(r);
+    const foot = st === 'done' ? `Đã nộp ${fmtTime(r.submittedAt)}, ${fmtNum(r.score)} điểm` : st === 'lost' ? 'Hết giờ, chưa nộp bài' : `Còn <span data-left="${esc(r.id)}">${fmtClock(r.left)}</span>`;
     const pct = total ? Math.round((r.answered || 0) / total * 100) : 0;
-    return `<article class="lcard ${st}"><div class="lname" title="${esc(r.name)}">${esc(r.name)}</div><span class="hint">${r.cls ? 'Lớp ' + esc(r.cls) : 'Chưa ghi lớp'}</span><div class="lbar"><i style="width:${pct}%"></i></div><div class="lstats"><span>Đã làm ${r.answered || 0}/${total}</span><span class="${r.violations ? 'bad' : ''}">Vi phạm ${r.violations || 0}</span></div><div class="lfoot">${foot}</div></article>`;
+    const acts = `${st !== 'done' ? `<button class="btn" data-act="add-time" data-id="${esc(r.id)}">+ Thêm giờ</button>` : ''}${r.device && E && E.maxLogins > 0 ? `<button class="btn" data-act="reset-login" data-id="${esc(r.id)}">Cấp lại lượt</button>` : ''}`;
+    return `<article class="lcard ${st}"><div class="lname" title="${esc(r.name)}">${esc(r.name)}</div><span class="hint">${r.cls ? 'Lớp ' + esc(r.cls) : 'Chưa ghi lớp'}</span><div class="lbar"><i style="width:${pct}%"></i></div><div class="lstats"><span>Đã làm ${r.answered || 0}/${total}</span><span class="${r.violations ? 'bad' : ''}">Vi phạm ${r.violations || 0}</span></div><div class="lfoot">${foot}${r.extra ? `<span class="extra-badge">+${r.extra} phút</span>` : ''}</div>${acts ? `<div class="lactions">${acts}</div>` : ''}</article>`;
   }).join('')}</div>` : `<div class="empty">Chưa có học sinh nào vào thi đề ${esc(L.watching)}.</div>`;
+}
+async function addTime(subId){
+  const sub = S.live.subs.find(x => x.id === subId); if (!sub) return;
+  const code = sub.code; let added = 0;
+  const v = await modal({
+    title: `Thêm giờ cho ${sub.name}`,
+    body: 'Nhập số phút cộng thêm. Nếu em đang mở bài, đồng hồ tăng ngay. Nếu em đã thoát ra và hết giờ, em có thể vào lại bài (cần còn lượt vào thi).',
+    input: 'number', value: '10', ok: 'Cộng thêm giờ',
+    validate: async val => {
+      const m = Math.round(+val);
+      if (!(m >= 1 && m <= 300)) return 'Nhập số phút từ 1 đến 300.';
+      try {
+        const E = await S.be.get('exams', code); if (!E) return 'Không tìm thấy đề.';
+        E.extra = { ...(E.extra || {}) }; E.extra[subId] = (+E.extra[subId] || 0) + m;
+        await S.be.set('exams', code, E); replaceExam(E); added = m;
+      } catch(e){ return 'Không lưu được: ' + (e.message || e); }
+      return '';
+    }
+  });
+  if (v !== null){ toast(`Đã cộng ${added} phút cho ${sub.name}.`); paintLive(true); }
+}
+async function resetLogin(subId){
+  const sub = [...S.live.subs, ...(S.res.subs || [])].find(x => x.id === subId); if (!sub || !sub.device) return;
+  const ok = await modal({
+    title: `Cấp lại lượt cho ${sub.name}?`,
+    body: 'Thiết bị em này đã dùng sẽ được tính lại số lượt từ đầu. Em có thể vào lại bài đang làm dở, hoặc làm lại đề nếu đã nộp (bài mới là một lượt nộp riêng).',
+    ok: 'Cấp lại lượt',
+    validate: async () => {
+      try {
+        const E = await S.be.get('exams', sub.code); if (!E) return 'Không tìm thấy đề.';
+        E.resets = { ...(E.resets || {}) }; E.resets[sub.device] = (+E.resets[sub.device] || 0) + 1;
+        await S.be.set('exams', sub.code, E); replaceExam(E);
+      } catch(e){ return 'Không lưu được: ' + (e.message || e); }
+      return '';
+    }
+  });
+  if (ok) toast(`Đã cấp lại lượt vào thi cho ${sub.name}.`);
 }
 
 /* kết quả */
@@ -947,9 +1060,9 @@ function resAreaHTML(){
   const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
   const head = `<div class="res-head"><div><h3>${esc(E.title)}</h3><p class="hint">Mã đề <strong class="code-inline">${esc(E.code)}</strong>. Giáo viên ${esc(E.teacher)}. ${E.questions.length} câu, ${E.duration} phút, tổng ${fmtNum(max)} điểm. Tạo lúc ${fmtDate(E.createdAt)}.${R.doing ? ` ${R.doing} học sinh chưa nộp.` : ''}</p>
     <div class="flags"><label class="check"><input type="checkbox" data-flag="showScore" ${E.showScore ? 'checked' : ''}><span>Cho học sinh xem điểm</span></label><label class="check"><input type="checkbox" data-flag="showAnswers" ${E.showAnswers ? 'checked' : ''}><span>Cho xem đáp án, lời giải và luyện lại câu sai</span></label></div></div>
-    <div class="row"><button class="btn" data-act="res-load" data-code="${esc(E.code)}">Tải lại</button>${subs.length ? `<button class="btn primary" data-act="export">Tải file Excel</button>` : ''}<button class="btn danger" data-act="del-exam" data-code="${esc(E.code)}">Xoá đề</button></div></div>`;
+    <div class="row"><button class="btn" data-act="res-load" data-code="${esc(E.code)}">Tải lại</button><button class="btn" data-act="exam-edit" data-code="${esc(E.code)}">Cài đặt đề</button>${subs.length ? `<button class="btn primary" data-act="export">Tải file Excel</button>` : ''}<button class="btn danger" data-act="del-exam" data-code="${esc(E.code)}">Xoá đề</button></div></div>`;
   if (!subs.length) return head + `<div class="empty" style="margin-top:14px">Chưa có bài nộp.</div>`;
-  const table = `<div class="table-wrap"><table><thead><tr><th class="num">#</th><th>Họ tên</th><th>Bài làm</th><th>Lớp</th><th class="num">Điểm</th><th class="num">Câu đúng</th><th class="num">Vi phạm</th><th>Nộp lúc</th><th class="num">Thời gian làm</th><th>Ghi chú</th><th>Nhận xét</th></tr></thead><tbody>${subs.map((s, i) => `<tr><td class="num">${i + 1}</td><td>${esc(s.name)}</td><td><button class="btn small" data-act="sub-view" data-id="${esc(s.id)}" aria-label="Xem bài của ${esc(s.name)}">Xem bài</button></td><td>${esc(s.cls)}</td><td class="num"><strong>${fmtNum(s.score)}</strong></td><td class="num">${s.correct}/${s.total}</td><td class="num">${s.violations || 0}</td><td>${fmtDate(s.submittedAt)}</td><td class="num">${fmtClock((Math.min(s.submittedAt, s.endAt) - s.startedAt) / 1000)}</td><td>${noteOf(s)}</td><td><button class="btn small" data-act="cmt" data-id="${esc(s.id)}" aria-label="${s.comment ? 'Sửa' : 'Viết'} nhận xét cho ${esc(s.name)}">${s.comment ? 'Sửa' : 'Viết'}</button>${s.comment ? `<span class="cmt-cell" title="${esc(s.comment)}">${esc(s.comment)}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+  const table = `<div class="table-wrap"><table><thead><tr><th class="num">#</th><th>Họ tên</th><th>Bài làm</th><th>Lớp</th><th class="num">Điểm</th><th class="num">Câu đúng</th><th class="num">Vi phạm</th><th>Nộp lúc</th><th class="num">Thời gian làm</th><th>Ghi chú</th><th>Nhận xét</th></tr></thead><tbody>${subs.map((s, i) => `<tr><td class="num">${i + 1}</td><td>${esc(s.name)}</td><td><div class="row nowrap"><button class="btn small" data-act="sub-view" data-id="${esc(s.id)}" aria-label="Xem bài của ${esc(s.name)}">Xem bài</button>${s.device && E.maxLogins > 0 ? `<button class="btn small" data-act="reset-login" data-id="${esc(s.id)}" aria-label="Cấp lại lượt cho ${esc(s.name)}">Cấp lại lượt</button>` : ''}</div></td><td>${esc(s.cls)}</td><td class="num"><strong>${fmtNum(s.score)}</strong></td><td class="num">${s.correct}/${s.total}</td><td class="num">${s.violations || 0}</td><td>${fmtDate(s.submittedAt)}</td><td class="num">${fmtClock((Math.min(s.submittedAt, endOf(s)) - s.startedAt) / 1000)}</td><td>${noteOf(s)}</td><td><button class="btn small" data-act="cmt" data-id="${esc(s.id)}" aria-label="${s.comment ? 'Sửa' : 'Viết'} nhận xét cho ${esc(s.name)}">${s.comment ? 'Sửa' : 'Viết'}</button>${s.comment ? `<span class="cmt-cell" title="${esc(s.comment)}">${esc(s.comment)}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
   return head + `
     <dl class="stats"><div><dt>Bài đã nộp</dt><dd>${subs.length}</dd></div><div><dt>Điểm trung bình</dt><dd>${fmtNum(avg)}</dd></div><div><dt>Cao nhất</dt><dd>${fmtNum(Math.max(...scores))}</dd></div><div><dt>Thấp nhất</dt><dd>${fmtNum(Math.min(...scores))}</dd></div></dl>
     ${table}
@@ -978,7 +1091,7 @@ async function exportExcel(){
   const R = S.res, E = R.exam;
   if (!window.XLSX){ toast('Không tải được thư viện Excel. Kiểm tra mạng rồi tải lại trang.', 'err'); return; }
   const head = ['STT', 'Họ tên', 'Lớp', 'Điểm', 'Số câu đúng', 'Vi phạm', 'Bắt đầu', 'Nộp lúc', 'Thời gian làm (phút)', 'Ghi chú', 'Nhận xét', ...E.questions.map(q => `Câu ${q.n}`)];
-  const rows = R.subs.map((s, i) => [i + 1, s.name, s.cls, round2(s.score), s.correct, s.violations || 0, fmtDate(s.startedAt), fmtDate(s.submittedAt), Math.round((Math.min(s.submittedAt, s.endAt) - s.startedAt) / 6000) / 10, noteOf(s), s.comment || '',
+  const rows = R.subs.map((s, i) => [i + 1, s.name, s.cls, round2(s.score), s.correct, s.violations || 0, fmtDate(s.startedAt), fmtDate(s.submittedAt), Math.round((Math.min(s.submittedAt, endOf(s)) - s.startedAt) / 6000) / 10, noteOf(s), s.comment || '',
     ...E.questions.map((q, j) => `${fmtAns(q, s.answers ? s.answers[q.n] : null)} ${s.perQ && s.perQ[j] ? '✓' : '✗'}`)]);
   const ws = XLSX.utils.aoa_to_sheet([head, ...rows]);
   ws['!cols'] = [{ wch: 5 }, { wch: 26 }, { wch: 8 }, { wch: 7 }, { wch: 11 }, { wch: 8 }, { wch: 17 }, { wch: 17 }, { wch: 12 }, { wch: 22 }, { wch: 40 }, ...E.questions.map(() => ({ wch: 10 }))];
@@ -992,16 +1105,20 @@ async function exportExcel(){
   catch(e){ if (e && e.code === 'declined') return; toast('Không tải được file: ' + ((e && (e.message || e.code)) || e), 'err'); }
 }
 async function deleteExam(code){
-  const E = S.res.exam; if (!E) return;
-  if (!await modal({ title: 'Xoá đề?', body: `Xoá đề “${E.title}” (mã ${code}), toàn bộ ảnh và ${S.res.subs.length} bài nộp. Không khôi phục được.`, ok: 'Xoá đề', kind: 'danger' })) return;
+  let E = S.exams.find(e => e.code === code) || (S.res.exam && S.res.exam.code === code ? S.res.exam : null);
+  let subs = [];
+  try { if (!E) E = await S.be.get('exams', code); subs = await S.be.list('subs', 'code', code); } catch(e){}
+  if (!E){ toast('Không tìm thấy đề ' + code + '.', 'err'); return; }
+  if (!await modal({ title: 'Xoá đề?', body: `Xoá đề “${E.title}” (mã ${code}), toàn bộ ảnh và ${subs.length} bài nộp. Không khôi phục được. Nên bấm “Sao lưu tất cả kết quả” ở mục Kết quả trước khi xoá.`, ok: 'Xoá đề', kind: 'danger' })) return;
+  toast('Đang xoá đề…');
   try {
-    const subs = await S.be.list('subs', 'code', code);
-    for (const s of subs) await S.be.del('subs', s.id);
+    for (const x of subs) await S.be.del('subs', x.id);
     const key = await S.be.get('keys', code);
     if (key && key.sol) for (const refs of Object.values(key.sol)) for (const r of refs) await S.be.delImage(r);
     for (const q of E.questions) for (const r of q.q) await S.be.delImage(r);
     await S.be.del('keys', code); await S.be.del('exams', code);
-    S.res = { code: '' };
+    if (S.res.code === code) S.res = { code: '' };
+    if (S.live.watching === code){ stopLive(); S.live.code = ''; }
     toast('Đã xoá đề ' + code + '.');
     await loadExams();
   } catch(e){ toast('Xoá chưa xong: ' + (e.message || e), 'err'); }
@@ -1029,17 +1146,17 @@ function gate(E){
   const now = Date.now();
   if (E.openAt && now < E.openAt) return `Đề chưa mở. Giờ mở đề: ${fmtDate(E.openAt)}.`;
   if (E.closeAt && now > E.closeAt) return `Đề đã đóng lúc ${fmtDate(E.closeAt)}.`;
-  const used = +LS.get('tt_login_' + E.code) || 0;
-  if (E.maxLogins > 0 && used >= E.maxLogins) return `Thiết bị này đã dùng hết ${E.maxLogins} lượt vào thi đề này.`;
+  const used = usedLogins(E);
+  if (E.maxLogins > 0 && used >= E.maxLogins) return `Thiết bị này đã dùng hết ${E.maxLogins} lượt vào thi đề này. Nếu cần làm lại, nhờ thầy cô cấp lại lượt rồi bấm “Kiểm tra mã đề” lần nữa.`;
   return '';
 }
 function typeSummary(E){ const c = { mc: 0, tf: 0, sa: 0 }; E.questions.forEach(q => c[q.type]++); return [c.mc && `${c.mc} trắc nghiệm`, c.tf && `${c.tf} đúng/sai`, c.sa && `${c.sa} trả lời ngắn`].filter(Boolean).join(', '); }
 function examInfoHTML(E){
-  const sess = loadSess(E.code), done = LS.getJSON('tt_done_' + E.code), used = +LS.get('tt_login_' + E.code) || 0;
+  const sess = loadSess(E.code), done = LS.getJSON('tt_done_' + E.code), used = usedLogins(E);
   let action;
   if (sess && sess.status === 'doing'){
     const left = E.maxLogins > 0 ? Math.max(0, E.maxLogins - used) : Infinity;
-    const expired = Date.now() >= sess.endAt;
+    const expired = Date.now() >= sess.endAt + extraFor(E, sess.subId) * 60000;
     const canRe = !expired && (!E.preventReload || left > 0);
     action = `<div class="notice"><strong>${esc(sess.name)}</strong> đang làm dở đề này${expired ? ' và đã hết giờ' : ''}.${E.preventReload && !expired ? (left === Infinity ? ' Mỗi lần vào lại được ghi nhận.' : ` Mỗi lần vào lại tính một lượt, còn ${left} lượt.`) : ''}${!canRe && !expired ? ' Đã hết lượt vào lại, chỉ có thể nộp phần đã làm.' : ''}</div>
       <div class="row">${canRe ? `<button class="btn primary big" data-act="resume">Vào lại bài thi</button>` : ''}<button class="btn ${canRe ? '' : 'primary big'}" data-act="force-submit">Nộp phần đã làm</button></div>`;
@@ -1069,7 +1186,7 @@ async function checkCode(){
     const n = $('#st-name'); if (n) n.focus();
   } catch(e){ msg.innerHTML = errSpan('Không kết nối được hệ thống: ' + (e.message || e)); }
 }
-const subDoc = (s, E) => ({ code: s.code, name: s.name, nameKey: normName(s.name), cls: s.cls, status: 'doing', answers: s.answers, answered: countAnswered(E, s.answers), total: E.questions.length, violations: s.violations, startedAt: s.startedAt, endAt: s.endAt, updatedAt: Date.now(), device: s.device });
+const subDoc = (s, E) => ({ code: s.code, name: s.name, nameKey: normName(s.name), cls: s.cls, status: 'doing', answers: s.answers, answered: countAnswered(E, s.answers), total: E.questions.length, violations: s.violations, startedAt: s.startedAt, endAt: s.endAt, extraMin: +s.extraMin || 0, updatedAt: Date.now(), device: s.device });
 async function begin(){
   const E = S.st.exam; if (!E) return;
   const name = $('#st-name').value.trim().replace(/\s+/g, ' '), cls = $('#st-cls').value.trim();
@@ -1079,7 +1196,7 @@ async function begin(){
   try { fresh = await S.be.get('exams', E.code) || E; } catch(e){}
   const g = gate(fresh); if (g){ err.textContent = g; return; }
   if (!await modal({ title: 'Bắt đầu làm bài?', body: `${name}${cls ? ', lớp ' + cls : ''}. Thời gian ${fresh.duration} phút, tính từ lúc bấm Bắt đầu.`, ok: 'Bắt đầu' })) return;
-  LS.set('tt_login_' + E.code, (+LS.get('tt_login_' + E.code) || 0) + 1);
+  bumpLogin(fresh);
   LS.setJSON('tt_student', { name, cls });
   const now = Date.now();
   const sess = { subId: E.code + '_' + rid(10), code: E.code, name, cls, startedAt: now, endAt: now + fresh.duration * 60000, answers: {}, violations: 0, idx: 0, status: 'doing', device: deviceId() };
@@ -1089,21 +1206,33 @@ async function begin(){
   enterExam(fresh, sess);
 }
 async function resumeSess(){
-  const E = S.st.exam, sess = loadSess(E.code); if (!sess) return render();
+  let E = S.st.exam;
+  try { E = await S.be.get('exams', E.code) || E; } catch(e){}
+  S.st.exam = E;
+  const sess = loadSess(E.code); if (!sess) return render();
   if (E.preventReload){
-    const used = +LS.get('tt_login_' + E.code) || 0;
-    if (E.maxLogins > 0 && used >= E.maxLogins) return finalize(E, sess, 'locked');
-    LS.set('tt_login_' + E.code, used + 1);
+    if (E.maxLogins > 0 && usedLogins(E) >= E.maxLogins) return finalize(E, sess, 'locked');
+    bumpLogin(E);
   }
   enterExam(E, sess);
 }
 function enterExam(E, sess){
   S.x = { exam: E, sess, away: false, writing: false, pending: false, submitting: false, syncT: null };
-  if (!sess.preview){ LS.set('tt_active', E.code); S.role = 'student'; }
+  if (!sess.preview){ LS.set('tt_active', E.code); S.role = 'student'; sess.extraMin = extraFor(E, sess.subId); saveSess(sess); }
   clearInterval(S.xTick); S.xTick = setInterval(xTick, 1000);
   go('exam');
   E.questions.forEach(q => q.q.forEach(imgUrl));
   pushSub(true);
+  if (!sess.preview){
+    const x = S.x;
+    x.unwatch = S.be.watch('exams', 'code', E.code, list => {
+      const fresh = list[0]; if (!fresh || S.x !== x || x.submitting) return;
+      const m = extraFor(fresh, sess.subId), old = +sess.extraMin || 0;
+      if (m === old) return;
+      sess.extraMin = m; saveSess(sess); xTick(); pushSub(true);
+      if (m > old) toast(`Thầy cô đã cộng thêm ${m - old} phút làm bài.`);
+    }, () => {});
+  }
 }
 function examView(){ const pv = S.x && S.x.sess.preview; return `<div class="wrap">${pv ? `<div class="notice row between" style="margin:14px 0 0"><span><strong>Chế độ xem thử của giáo viên.</strong> Bài làm không được lưu, không tính lượt và không ghi vi phạm.</span><button class="btn small" data-act="pv-exit">Thoát xem thử</button></div>` : ''}<div class="exam"><section class="panel" id="qpane" aria-live="polite"></section><aside class="sheet" id="sheet" aria-label="Phiếu trả lời"></aside></div></div>`; }
 function fillQ(){
@@ -1138,7 +1267,7 @@ function moveTo(i){
 }
 function xTick(){
   const x = S.x; if (!x || x.submitting) return;
-  const left = (x.sess.endAt - Date.now()) / 1000;
+  const left = (endOf(x.sess) - Date.now()) / 1000;
   const t = $('#xtimer'); if (t){ t.textContent = fmtClock(left); t.classList.toggle('low', left <= 300); }
   if (left <= 0) finalize(x.exam, x.sess, 'timeout');
 }
@@ -1169,11 +1298,11 @@ async function submitExam(){
   finalize(x.exam, x.sess, 'manual');
 }
 async function finalize(E, sess, reason){
-  if (S.x){ S.x.submitting = true; clearTimeout(S.x.syncT); }
+  if (S.x){ S.x.submitting = true; clearTimeout(S.x.syncT); if (S.x.unwatch){ S.x.unwatch(); S.x.unwatch = null; } }
   clearInterval(S.xTick);
   closeModals();
   while (S.x && S.x.writing) await sleep(100);
-  sess.status = 'submitting'; sess.reason = reason; sess.submittedAt = sess.submittedAt || Math.min(Date.now(), sess.endAt);
+  sess.status = 'submitting'; sess.reason = reason; sess.submittedAt = sess.submittedAt || Math.min(Date.now(), endOf(sess));
   saveSess(sess);
   S.done = { exam: E, sess, reason, state: 'sending' };
   go('result');
@@ -1501,6 +1630,9 @@ document.addEventListener('click', async e => {
     case 'resend': S.done.state = 'sending'; render(); sendResult(); break;
     case 'cmt': editComment(el.dataset.id); break;
     case 'sub-view': viewSub(el.dataset.id); break;
+    case 'exam-edit': editExam(el.dataset.code); break;
+    case 'add-time': addTime(el.dataset.id); break;
+    case 'reset-login': resetLogin(el.dataset.id); break;
     case 'pv-start': startPreview(); break;
     case 'pv-exit': if (S.x && S.x.sess.preview && await modal({ title: 'Thoát xem thử?', body: 'Bài làm thử sẽ bị bỏ, không lưu lại.', ok: 'Thoát xem thử' })){ clearInterval(S.xTick); S.x = null; go('teacher'); } break;
     case 'export-all': exportAll(el); break;
@@ -1576,7 +1708,7 @@ window.addEventListener('beforeunload', e => { if (S.view === 'exam' && S.x && !
     if (E && sess){
       S.role = 'student'; S.st = { code: active, exam: E };
       if (sess.status === 'submitting'){ S.done = { exam: E, sess, reason: sess.reason || 'manual', state: 'sending' }; go('result'); sendResult(); return; }
-      if (!E.preventReload && Date.now() < sess.endAt){ enterExam(E, sess); return; }
+      if (!E.preventReload && Date.now() < sess.endAt + extraFor(E, sess.subId) * 60000){ enterExam(E, sess); return; }
       go('student'); return;
     }
     LS.del('tt_active');
