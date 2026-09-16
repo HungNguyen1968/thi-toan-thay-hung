@@ -241,6 +241,29 @@ tr:last-child td{border-bottom:0}
 .ansline dd{margin:0;font-weight:700;letter-spacing:.03em}
 details summary{cursor:pointer;color:var(--pen);font-weight:600;margin:6px 0 10px}
 
+/* bài đã làm, luyện tập, nhận xét */
+.section-h{margin:40px 0 12px}
+.mine{border-top:2px solid var(--ink);margin-top:8px}
+.mine-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 2px;border-bottom:1px solid var(--line)}
+.mine-t{font-weight:700}
+.mine-score{font-weight:800;font-size:22px;font-variant-numeric:tabular-nums;color:var(--red);white-space:nowrap}
+.mine-score small{font-size:14px;color:var(--muted);font-weight:600}
+.comment{margin-top:8px;padding:8px 12px;border-left:3px solid var(--pen);background:var(--pen-soft);border-radius:0 6px 6px 0;font-size:15px;white-space:pre-wrap;overflow-wrap:anywhere}
+.practice-box{margin-top:16px;padding:16px;border:1.5px solid var(--ink);border-radius:10px}
+.pres{margin-top:18px;padding:14px 16px;border-radius:10px;border:1.5px solid var(--line)}
+.pres.ok{border-color:var(--green);background:var(--green-soft)}
+.pres.bad{border-color:var(--red);background:var(--red-soft)}
+.tf-mark{font-size:13px;font-weight:700}
+.tf-mark.ok{color:var(--green)}
+.tf-mark.bad{color:var(--red)}
+.bubble:disabled{cursor:default}
+.bubble:disabled:hover{background:var(--surface)}
+.bubble:disabled:not([aria-pressed="true"]){opacity:.5}
+.cmt-cell{display:inline-block;max-width:200px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;margin-left:8px}
+textarea.input{resize:vertical;min-height:120px;line-height:1.5;font-family:inherit}
+.flags{display:flex;gap:8px 22px;flex-wrap:wrap;margin-top:10px}
+.flags .check{font-size:14px}
+
 /* modal & toast */
 .modal-bg{position:fixed;inset:0;z-index:60;background:color-mix(in srgb,#0A0F1A 55%,transparent);display:grid;place-items:center;padding:16px}
 .modal{width:min(460px,100%);background:var(--surface);border:2px solid var(--ink);border-radius:12px;padding:22px}
@@ -330,6 +353,7 @@ const SS = {
   get(k){ try { return sessionStorage.getItem(k); } catch(e){ return null; } },
   set(k, v){ try { sessionStorage.setItem(k, v); } catch(e){} }
 };
+function normName(s){ return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/đ/g, 'd').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80); }
 function deviceId(){ let d = LS.get('tt_device'); if(!d){ d = rid(12); LS.set('tt_device', d); } return d; }
 function toast(msg, kind){ const t = document.createElement('div'); t.className = 'toast' + (kind ? ' ' + kind : ''); t.setAttribute('role', 'status'); t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 3200); }
 async function sha(s){
@@ -557,17 +581,17 @@ function newDraft(){
 const S = {
   be: null, view: 'boot', role: null, teacher: false, ttab: 'create', draft: newDraft(), exams: [],
   live: { code: '', watching: '', unsub: null, subs: [], zoom: 1, tick: null, ok: false },
-  res: { code: '' }, st: { code: '', exam: null }, x: null, xTick: null, done: null
+  res: { code: '' }, st: { code: '', exam: null }, h: { name: '' }, p: null, x: null, xTick: null, done: null
 };
 const loadSess = code => LS.getJSON('tt_sess_' + code);
-const saveSess = s => LS.setJSON('tt_sess_' + s.code, s);
+const saveSess = s => { if (!s.preview) LS.setJSON('tt_sess_' + s.code, s); };
 
 /* ---------------- hộp thoại ---------------- */
-function modal({ title, body = '', html = '', input = null, ok = 'Đồng ý', cancel = 'Hủy', kind = 'primary', validate = null }){
+function modal({ title, body = '', html = '', input = null, value = '', placeholder = '', ok = 'Đồng ý', cancel = 'Hủy', kind = 'primary', validate = null }){
   return new Promise(resolve => {
     const prev = document.activeElement;
     const el = document.createElement('div'); el.className = 'modal-bg';
-    el.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="m-t"><h3 id="m-t">${esc(title)}</h3>${body ? `<p>${esc(body)}</p>` : ''}${html}${input ? `<input class="input" id="m-in" type="${input}" autocomplete="off" aria-label="${esc(title)}">` : ''}<div class="error" id="m-err" role="alert"></div><div class="row end">${cancel ? `<button class="btn" data-m="no">${esc(cancel)}</button>` : ''}<button class="btn ${kind}" data-m="yes">${esc(ok)}</button></div></div>`;
+    el.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="m-t"><h3 id="m-t">${esc(title)}</h3>${body ? `<p>${esc(body)}</p>` : ''}${html}${input === 'textarea' ? `<textarea class="input" id="m-in" rows="5" aria-label="${esc(title)}" placeholder="${esc(placeholder)}">${esc(value)}</textarea>` : input ? `<input class="input" id="m-in" type="${input}" autocomplete="off" aria-label="${esc(title)}" value="${esc(value)}">` : ''}<div class="error" id="m-err" role="alert"></div><div class="row end">${cancel ? `<button class="btn" data-m="no">${esc(cancel)}</button>` : ''}<button class="btn ${kind}" data-m="yes">${esc(ok)}</button></div></div>`;
     $('#modal-root').appendChild(el);
     const inp = $('#m-in', el);
     (inp || $('[data-m="yes"]', el)).focus();
@@ -581,8 +605,8 @@ function modal({ title, body = '', html = '', input = null, ok = 'Đồng ý', c
     };
     const key = e => {
       if (e.key === 'Escape' && cancel){ e.preventDefault(); no(); }
-      else if (e.key === 'Enter'){ e.preventDefault(); const f = document.activeElement; if (f && f.dataset && f.dataset.m === 'no') no(); else yes(); }
-      else if (e.key === 'Tab'){ const fs = $$('button,input', el); const i = fs.indexOf(document.activeElement); if (e.shiftKey && i <= 0){ e.preventDefault(); fs[fs.length - 1].focus(); } else if (!e.shiftKey && i === fs.length - 1){ e.preventDefault(); fs[0].focus(); } }
+      else if (e.key === 'Enter'){ const f = document.activeElement; if (f && f.tagName === 'TEXTAREA' && !(e.ctrlKey || e.metaKey)) return; e.preventDefault(); if (f && f.dataset && f.dataset.m === 'no') no(); else yes(); }
+      else if (e.key === 'Tab'){ const fs = $$('button,input,textarea', el); const i = fs.indexOf(document.activeElement); if (e.shiftKey && i <= 0){ e.preventDefault(); fs[fs.length - 1].focus(); } else if (!e.shiftKey && i === fs.length - 1){ e.preventDefault(); fs[0].focus(); } }
     };
     document.addEventListener('keydown', key, true);
     el.addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (b) b.dataset.m === 'yes' ? yes() : no(); });
@@ -596,7 +620,7 @@ function topbarHTML(){
   const brand = `<div class="brand"><span class="brand-mark" aria-hidden="true"></span><span class="brand-t">Thi Toán Online</span></div>`;
   if (S.view === 'exam' && S.x){
     const s = S.x.sess;
-    return `${brand}<div class="xbar"><span class="xwho">Thí sinh: <strong>${esc(s.name)}</strong></span><span class="xvio ${s.violations ? 'bad' : ''}" id="xvio">Vi phạm: ${s.violations}</span><span class="timer" id="xtimer" role="timer" aria-label="Thời gian còn lại">--:--</span><button class="btn primary small" data-act="submit">Nộp bài</button></div>`;
+    return `${brand}<div class="xbar"><span class="xwho">Thí sinh: <strong>${esc(s.name)}</strong></span>${s.preview ? '<span class="role-chip">Xem thử</span>' : `<span class="xvio ${s.violations ? 'bad' : ''}" id="xvio">Vi phạm: ${s.violations}</span>`}<span class="timer" id="xtimer" role="timer" aria-label="Thời gian còn lại">--:--</span><button class="btn primary small" data-act="submit">Nộp bài</button></div>`;
   }
   const role = S.role === 'teacher' ? 'Giáo viên' : S.role === 'student' ? 'Học sinh' : '';
   return `${brand}<div class="row nowrap">${role ? `<span class="role-chip">${role}</span><button class="btn small ghost" data-act="home">Đổi vai trò</button>` : ''}</div>`;
@@ -608,7 +632,7 @@ function modeNotice(){
 const VIEWS = {
   boot: () => `<div class="boot"><p class="lede" role="status">Đang kết nối hệ thống…</p></div>`,
   fatal: () => `<div class="wrap narrow"><h1>Không kết nối được hệ thống</h1><p class="lede">${esc(S.fatal || '')}</p><button class="btn primary" onclick="location.reload()">Tải lại trang</button></div>`,
-  home: homeView, teacher: teacherView, student: studentView, exam: examView, result: resultView
+  home: homeView, teacher: teacherView, student: studentView, exam: examView, result: resultView, practice: practiceView
 };
 function render(){
   $('#topbar').innerHTML = topbarHTML();
@@ -616,6 +640,7 @@ function render(){
   if (S.view === 'exam'){ fillQ(); fillSheet(); xTick(); }
   if (S.view === 'teacher' && S.ttab === 'live' && S.live.watching) paintLive();
   if (S.view === 'result') hydrate($('#app'));
+  if (S.view === 'practice' && S.p && !S.p.finished) fillP();
 }
 function go(v){ if (v !== 'teacher') stopLive(); S.view = v; render(); window.scrollTo(0, 0); }
 
@@ -661,10 +686,36 @@ async function openTeacher(){
 
 /* ---------------- giáo viên ---------------- */
 function teacherView(){
-  const tabs = [['create', 'Tạo đề'], ['live', 'Theo dõi trực tiếp'], ['results', 'Kết quả']];
+  const tabs = [['create', 'Tạo đề'], ['live', 'Theo dõi trực tiếp'], ['results', 'Kết quả'], ['preview', 'Xem như học sinh']];
   return `<div class="wrap">${modeNotice()}<nav class="subtabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" class="subtab" aria-selected="${S.ttab === k}" data-act="ttab" data-k="${k}">${l}</button>`).join('')}</nav><div id="tpanel">${tpanelHTML()}</div></div>`;
 }
-const tpanelHTML = () => S.ttab === 'create' ? createTab() : S.ttab === 'live' ? liveTab() : resultsTab();
+const tpanelHTML = () => S.ttab === 'create' ? createTab() : S.ttab === 'live' ? liveTab() : S.ttab === 'preview' ? previewTab() : resultsTab();
+function previewTab(){
+  return `<section class="block"><h2>Làm thử đề như học sinh</h2>
+    <p class="hint" style="margin-bottom:14px">Mở đề đúng như học sinh thấy: đồng hồ, phiếu trả lời, cảnh báo khi nộp, chấm điểm và lời giải. Bài làm thử không được lưu, không tính lượt vào thi và không hiện trong theo dõi hay kết quả.</p>
+    <div class="row">${examSelect('pv-code', S.pvCode || (S.exams[0] && S.exams[0].code))}${S.exams.length ? `<button class="btn primary" data-act="pv-start">Bắt đầu làm thử</button>` : ''}</div>
+  </section>
+  <section class="block"><h2>Xem trang của một học sinh</h2>
+    <p class="hint" style="margin-bottom:12px">Nhập họ tên để xem đúng những gì em đó thấy ở mục “Bài đã làm và luyện tập”: điểm, nhận xét và các câu sai. Luyện tập ở đây chỉ để xem, không làm thay đổi tiến độ của học sinh.</p>
+    <label class="field" for="h-name">Họ tên học sinh</label>
+    <div class="row nowrap" style="margin-top:6px"><input class="input" id="h-name" autocomplete="off" value="${esc(S.h.preview ? S.h.name || '' : '')}"><button class="btn" data-act="h-load">Xem như học sinh</button></div>
+    <div id="h-area">${S.h.preview ? mineHTML() : ''}</div>
+  </section>`;
+}
+async function startPreview(){
+  const code = $('#pv-code') && $('#pv-code').value; if (!code) return;
+  S.pvCode = code;
+  let E = null; try { E = await S.be.get('exams', code); } catch(e){}
+  if (!E){ toast('Không tải được đề này.', 'err'); return; }
+  const now = Date.now();
+  enterExam(E, { subId: 'preview', code, name: 'Giáo viên (xem thử)', cls: '', startedAt: now, endAt: now + E.duration * 60000, answers: {}, violations: 0, idx: 0, status: 'doing', preview: true });
+}
+function viewSub(id){
+  const R = S.res, sub = R.subs && R.subs.find(x => x.id === id); if (!sub || !R.exam) return;
+  const key = R.key || { answers: {}, sol: {} };
+  S.done = { exam: R.exam, state: 'sent', g: grade(R.exam, key, sub.answers || {}), key, doc: sub, reason: sub.reason || 'past', teacher: true };
+  go('result');
+}
 async function loadExams(){
   try { S.exams = (await S.be.list('exams')).sort((a, b) => b.createdAt - a.createdAt); }
   catch(e){ S.exams = []; toast('Không tải được danh sách đề.', 'err'); }
@@ -872,7 +923,7 @@ function paintLive(){
 
 /* kết quả */
 function resultsTab(){
-  return `<section class="block"><h2>Xem kết quả thi</h2>
+  return `<section class="block"><div class="row between" style="margin-bottom:16px"><h2 style="margin:0">Xem kết quả thi</h2><button class="btn" data-act="export-all" title="Tải bảng điểm của tất cả các đề vào một file Excel">Sao lưu tất cả kết quả</button></div>
     <div class="row">${examSelect('res-code', S.res.code || (S.exams[0] && S.exams[0].code))}${S.exams.length ? `<button class="btn primary" data-act="res-load">Xem kết quả</button>` : ''}</div>
     <div id="res-area">${resAreaHTML()}</div></section>`;
 }
@@ -894,10 +945,11 @@ function resAreaHTML(){
   if (!R.exam) return `<div class="empty" style="margin-top:14px">Không tìm thấy đề ${esc(R.code)}. Có thể đề đã bị xoá.</div>`;
   const E = R.exam, subs = R.subs, max = maxScore(E), scores = subs.map(s => s.score);
   const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
-  const head = `<div class="res-head"><div><h3>${esc(E.title)}</h3><p class="hint">Mã đề <strong class="code-inline">${esc(E.code)}</strong>. Giáo viên ${esc(E.teacher)}. ${E.questions.length} câu, ${E.duration} phút, tổng ${fmtNum(max)} điểm. Tạo lúc ${fmtDate(E.createdAt)}.${R.doing ? ` ${R.doing} học sinh chưa nộp.` : ''}</p></div>
+  const head = `<div class="res-head"><div><h3>${esc(E.title)}</h3><p class="hint">Mã đề <strong class="code-inline">${esc(E.code)}</strong>. Giáo viên ${esc(E.teacher)}. ${E.questions.length} câu, ${E.duration} phút, tổng ${fmtNum(max)} điểm. Tạo lúc ${fmtDate(E.createdAt)}.${R.doing ? ` ${R.doing} học sinh chưa nộp.` : ''}</p>
+    <div class="flags"><label class="check"><input type="checkbox" data-flag="showScore" ${E.showScore ? 'checked' : ''}><span>Cho học sinh xem điểm</span></label><label class="check"><input type="checkbox" data-flag="showAnswers" ${E.showAnswers ? 'checked' : ''}><span>Cho xem đáp án, lời giải và luyện lại câu sai</span></label></div></div>
     <div class="row"><button class="btn" data-act="res-load" data-code="${esc(E.code)}">Tải lại</button>${subs.length ? `<button class="btn primary" data-act="export">Tải file Excel</button>` : ''}<button class="btn danger" data-act="del-exam" data-code="${esc(E.code)}">Xoá đề</button></div></div>`;
   if (!subs.length) return head + `<div class="empty" style="margin-top:14px">Chưa có bài nộp.</div>`;
-  const table = `<div class="table-wrap"><table><thead><tr><th class="num">#</th><th>Họ tên</th><th>Lớp</th><th class="num">Điểm</th><th class="num">Câu đúng</th><th class="num">Vi phạm</th><th>Nộp lúc</th><th class="num">Thời gian làm</th><th>Ghi chú</th></tr></thead><tbody>${subs.map((s, i) => `<tr><td class="num">${i + 1}</td><td>${esc(s.name)}</td><td>${esc(s.cls)}</td><td class="num"><strong>${fmtNum(s.score)}</strong></td><td class="num">${s.correct}/${s.total}</td><td class="num">${s.violations || 0}</td><td>${fmtDate(s.submittedAt)}</td><td class="num">${fmtClock((Math.min(s.submittedAt, s.endAt) - s.startedAt) / 1000)}</td><td>${noteOf(s)}</td></tr>`).join('')}</tbody></table></div>`;
+  const table = `<div class="table-wrap"><table><thead><tr><th class="num">#</th><th>Họ tên</th><th>Bài làm</th><th>Lớp</th><th class="num">Điểm</th><th class="num">Câu đúng</th><th class="num">Vi phạm</th><th>Nộp lúc</th><th class="num">Thời gian làm</th><th>Ghi chú</th><th>Nhận xét</th></tr></thead><tbody>${subs.map((s, i) => `<tr><td class="num">${i + 1}</td><td>${esc(s.name)}</td><td><button class="btn small" data-act="sub-view" data-id="${esc(s.id)}" aria-label="Xem bài của ${esc(s.name)}">Xem bài</button></td><td>${esc(s.cls)}</td><td class="num"><strong>${fmtNum(s.score)}</strong></td><td class="num">${s.correct}/${s.total}</td><td class="num">${s.violations || 0}</td><td>${fmtDate(s.submittedAt)}</td><td class="num">${fmtClock((Math.min(s.submittedAt, s.endAt) - s.startedAt) / 1000)}</td><td>${noteOf(s)}</td><td><button class="btn small" data-act="cmt" data-id="${esc(s.id)}" aria-label="${s.comment ? 'Sửa' : 'Viết'} nhận xét cho ${esc(s.name)}">${s.comment ? 'Sửa' : 'Viết'}</button>${s.comment ? `<span class="cmt-cell" title="${esc(s.comment)}">${esc(s.comment)}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
   return head + `
     <dl class="stats"><div><dt>Bài đã nộp</dt><dd>${subs.length}</dd></div><div><dt>Điểm trung bình</dt><dd>${fmtNum(avg)}</dd></div><div><dt>Cao nhất</dt><dd>${fmtNum(Math.max(...scores))}</dd></div><div><dt>Thấp nhất</dt><dd>${fmtNum(Math.min(...scores))}</dd></div></dl>
     ${table}
@@ -925,11 +977,11 @@ function rateDetail(i){
 async function exportExcel(){
   const R = S.res, E = R.exam;
   if (!window.XLSX){ toast('Không tải được thư viện Excel. Kiểm tra mạng rồi tải lại trang.', 'err'); return; }
-  const head = ['STT', 'Họ tên', 'Lớp', 'Điểm', 'Số câu đúng', 'Vi phạm', 'Bắt đầu', 'Nộp lúc', 'Thời gian làm (phút)', 'Ghi chú', ...E.questions.map(q => `Câu ${q.n}`)];
-  const rows = R.subs.map((s, i) => [i + 1, s.name, s.cls, round2(s.score), s.correct, s.violations || 0, fmtDate(s.startedAt), fmtDate(s.submittedAt), Math.round((Math.min(s.submittedAt, s.endAt) - s.startedAt) / 6000) / 10, noteOf(s),
+  const head = ['STT', 'Họ tên', 'Lớp', 'Điểm', 'Số câu đúng', 'Vi phạm', 'Bắt đầu', 'Nộp lúc', 'Thời gian làm (phút)', 'Ghi chú', 'Nhận xét', ...E.questions.map(q => `Câu ${q.n}`)];
+  const rows = R.subs.map((s, i) => [i + 1, s.name, s.cls, round2(s.score), s.correct, s.violations || 0, fmtDate(s.startedAt), fmtDate(s.submittedAt), Math.round((Math.min(s.submittedAt, s.endAt) - s.startedAt) / 6000) / 10, noteOf(s), s.comment || '',
     ...E.questions.map((q, j) => `${fmtAns(q, s.answers ? s.answers[q.n] : null)} ${s.perQ && s.perQ[j] ? '✓' : '✗'}`)]);
   const ws = XLSX.utils.aoa_to_sheet([head, ...rows]);
-  ws['!cols'] = [{ wch: 5 }, { wch: 26 }, { wch: 8 }, { wch: 7 }, { wch: 11 }, { wch: 8 }, { wch: 17 }, { wch: 17 }, { wch: 12 }, { wch: 22 }, ...E.questions.map(() => ({ wch: 10 }))];
+  ws['!cols'] = [{ wch: 5 }, { wch: 26 }, { wch: 8 }, { wch: 7 }, { wch: 11 }, { wch: 8 }, { wch: 17 }, { wch: 17 }, { wch: 12 }, { wch: 22 }, { wch: 40 }, ...E.questions.map(() => ({ wch: 10 }))];
   const keyRows = [['Câu', 'Loại', 'Đáp án', 'Tỉ lệ làm đúng'], ...E.questions.map((q, i) => [q.n, TYPE_LABEL[q.type], R.key && R.key.answers ? R.key.answers[q.n] : '', `${Math.round(R.subs.filter(s => s.perQ && s.perQ[i]).length / R.subs.length * 100)}%`])];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Kết quả');
@@ -957,13 +1009,20 @@ async function deleteExam(code){
 
 /* ---------------- học sinh ---------------- */
 function studentView(){
-  const st = S.st;
+  const st = S.st, me = LS.getJSON('tt_student') || {};
   return `<div class="wrap narrow"><h1>Vào thi</h1>${modeNotice()}
     <div class="panel">
       <label class="field" for="code">Mã đề</label>
       <div class="row nowrap" style="margin-top:6px"><input class="input code-input" id="code" value="${esc(st.code)}" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="VD: 7KQ2MX"><button class="btn" data-act="check-code">Kiểm tra mã đề</button></div>
       <div id="code-msg" role="status" style="margin-top:8px"></div>
       ${st.exam ? examInfoHTML(st.exam) : ''}
+    </div>
+    <h2 class="section-h">Bài đã làm và luyện tập</h2>
+    <div class="panel">
+      <p class="hint" style="margin-bottom:12px">Nhập họ tên giống lúc vào thi để xem điểm, nhận xét của thầy cô và luyện lại các câu đã làm sai.</p>
+      <label class="field" for="h-name">Họ và tên</label>
+      <div class="row nowrap" style="margin-top:6px"><input class="input" id="h-name" autocomplete="name" value="${esc(S.h.name || me.name || '')}"><button class="btn" data-act="h-load">Xem bài đã làm</button></div>
+      <div id="h-area">${mineHTML()}</div>
     </div></div>`;
 }
 function gate(E){
@@ -1010,7 +1069,7 @@ async function checkCode(){
     const n = $('#st-name'); if (n) n.focus();
   } catch(e){ msg.innerHTML = errSpan('Không kết nối được hệ thống: ' + (e.message || e)); }
 }
-const subDoc = (s, E) => ({ code: s.code, name: s.name, cls: s.cls, status: 'doing', answers: s.answers, answered: countAnswered(E, s.answers), total: E.questions.length, violations: s.violations, startedAt: s.startedAt, endAt: s.endAt, updatedAt: Date.now(), device: s.device });
+const subDoc = (s, E) => ({ code: s.code, name: s.name, nameKey: normName(s.name), cls: s.cls, status: 'doing', answers: s.answers, answered: countAnswered(E, s.answers), total: E.questions.length, violations: s.violations, startedAt: s.startedAt, endAt: s.endAt, updatedAt: Date.now(), device: s.device });
 async function begin(){
   const E = S.st.exam; if (!E) return;
   const name = $('#st-name').value.trim().replace(/\s+/g, ' '), cls = $('#st-cls').value.trim();
@@ -1040,14 +1099,13 @@ async function resumeSess(){
 }
 function enterExam(E, sess){
   S.x = { exam: E, sess, away: false, writing: false, pending: false, submitting: false, syncT: null };
-  LS.set('tt_active', E.code);
-  S.role = 'student';
+  if (!sess.preview){ LS.set('tt_active', E.code); S.role = 'student'; }
   clearInterval(S.xTick); S.xTick = setInterval(xTick, 1000);
   go('exam');
   E.questions.forEach(q => q.q.forEach(imgUrl));
   pushSub(true);
 }
-function examView(){ return `<div class="wrap"><div class="exam"><section class="panel" id="qpane" aria-live="polite"></section><aside class="sheet" id="sheet" aria-label="Phiếu trả lời"></aside></div></div>`; }
+function examView(){ const pv = S.x && S.x.sess.preview; return `<div class="wrap">${pv ? `<div class="notice row between" style="margin:14px 0 0"><span><strong>Chế độ xem thử của giáo viên.</strong> Bài làm không được lưu, không tính lượt và không ghi vi phạm.</span><button class="btn small" data-act="pv-exit">Thoát xem thử</button></div>` : ''}<div class="exam"><section class="panel" id="qpane" aria-live="polite"></section><aside class="sheet" id="sheet" aria-label="Phiếu trả lời"></aside></div></div>`; }
 function fillQ(){
   const { exam: E, sess } = S.x; const q = E.questions[sess.idx]; const a = sess.answers[q.n];
   const imgs = q.q.length ? q.q.map((r, i) => `<img class="qimg" data-ref="${esc(r)}" alt="Đề câu ${q.n}${q.q.length > 1 ? ', phần ' + (i + 1) : ''}">`).join('') : `<p class="hint">Câu này không có ảnh đề.</p>`;
@@ -1084,7 +1142,7 @@ function xTick(){
   const t = $('#xtimer'); if (t){ t.textContent = fmtClock(left); t.classList.toggle('low', left <= 300); }
   if (left <= 0) finalize(x.exam, x.sess, 'timeout');
 }
-function pushSub(now){ const x = S.x; if (!x) return; clearTimeout(x.syncT); x.syncT = setTimeout(syncNow, now ? 0 : 1500); }
+function pushSub(now){ const x = S.x; if (!x || x.sess.preview) return; clearTimeout(x.syncT); x.syncT = setTimeout(syncNow, now ? 0 : 1500); }
 async function syncNow(){
   const x = S.x; if (!x || x.submitting) return;
   if (x.writing){ x.pending = true; return; }
@@ -1094,7 +1152,7 @@ async function syncNow(){
   if (x.pending && !x.submitting){ x.pending = false; syncNow(); }
 }
 function onAway(){
-  const x = S.x; if (S.view !== 'exam' || !x || x.away || x.submitting) return;
+  const x = S.x; if (S.view !== 'exam' || !x || x.away || x.submitting || x.sess.preview) return;
   x.away = true; x.sess.violations++; saveSess(x.sess); pushSub(true);
   const v = $('#xvio'); if (v){ v.textContent = 'Vi phạm: ' + x.sess.violations; v.classList.add('bad'); }
 }
@@ -1127,6 +1185,12 @@ async function sendResult(){
     const key = await S.be.get('keys', E.code);
     if (!key) throw new Error('Không tải được đáp án của đề.');
     const g = grade(E, key, sess.answers);
+    if (sess.preview){
+      const doc = { ...subDoc(sess, E), status: 'done', submittedAt: sess.submittedAt, reason, score: g.score, max: g.max, correct: g.correct, perQ: g.perQ };
+      S.x = null; S.done = { exam: E, sess, reason, state: 'sent', g, key, doc, preview: true };
+      if (S.view === 'result') render();
+      return;
+    }
     const doc = { ...subDoc(sess, E), status: 'done', submittedAt: sess.submittedAt, reason, score: g.score, max: g.max, correct: g.correct, perQ: g.perQ };
     await S.be.set('subs', sess.subId, doc);
     LS.del('tt_sess_' + E.code); LS.del('tt_active');
@@ -1144,12 +1208,19 @@ function resultView(){
   if (d.state === 'sending') return `<div class="wrap narrow"><div class="boot"><p class="lede" role="status">Đang nộp bài…</p></div></div>`;
   if (d.state === 'error') return `<div class="wrap narrow"><h1>Chưa gửi được bài</h1><p class="lede">${esc(d.err)} Bài làm vẫn lưu trên máy này. Kiểm tra mạng rồi bấm Gửi lại.</p><button class="btn primary big" data-act="resend">Gửi lại</button></div>`;
   const { exam: E, g, key, doc } = d;
-  const why = d.reason === 'timeout' ? ' Hết giờ, bài được nộp tự động.' : d.reason === 'locked' ? ' Bài được nộp vì đã hết lượt vào lại.' : '';
+  const full = d.preview || d.teacher, toTeacher = full || d.asStudent;
+  const showScore = full || E.showScore, showAns = full || E.showAnswers;
+  const why = d.reason === 'timeout' ? ' Hết giờ, bài được nộp tự động.' : d.reason === 'locked' ? ' Bài được nộp vì đã hết lượt vào lại.' : d.reason === 'saved' ? ' Nộp từ bản lưu trên máy.' : '';
+  const head = d.preview ? 'Bài làm thử của giáo viên, không được lưu.' : d.teacher ? `Bài làm của ${doc.name}` : d.reason === 'past' ? 'Bài làm đã nộp' : 'Bài làm đã được ghi nhận.';
+  const teacherNote = full ? `<div class="notice">Giáo viên đang xem đầy đủ điểm và đáp án. Với đề này, học sinh <strong>${E.showScore ? 'được' : 'không được'}</strong> xem điểm và <strong>${E.showAnswers ? 'được' : 'không được'}</strong> xem đáp án, lời giải sau khi nộp.</div>`
+    : d.asStudent ? `<div class="notice">Giáo viên đang xem bài đúng như học sinh thấy.</div>` : '';
   return `<div class="wrap mid">
-    <div class="ok-banner" role="status"><span class="check-bubble" aria-hidden="true">✓</span><div><strong>${d.reason === 'past' ? 'Bài làm đã nộp' : 'Bài làm đã được ghi nhận.'}</strong><span class="hint">${esc(doc.name)}${doc.cls ? ', lớp ' + esc(doc.cls) : ''}. ${esc(E.title)}. Nộp lúc ${fmtDate(doc.submittedAt)}.${why}</span></div></div>
-    ${E.showScore ? `<div class="score" aria-label="Điểm ${fmtNum(g.score)} trên ${fmtNum(g.max)}">${fmtNum(g.score)}<small> / ${fmtNum(g.max)}</small></div><p class="lede">Đúng hoàn toàn ${g.correct}/${g.total} câu. Số lần vi phạm: ${doc.violations || 0}.</p>` : `<p class="big-note">Điểm số sẽ được giáo viên công bố sau.</p>`}
-    <button class="btn" data-act="exit">Thoát</button>
-    ${E.showAnswers ? `<h2 style="margin-top:36px">Chi tiết bài làm</h2>${g.items.map(it => reviewHTML(it, key, E.showScore)).join('')}` : ''}
+    <div class="ok-banner" role="status"><span class="check-bubble" aria-hidden="true">✓</span><div><strong>${esc(head)}</strong><span class="hint">${d.preview ? '' : esc(doc.name) + (doc.cls ? ', lớp ' + esc(doc.cls) : '') + '. '}${esc(E.title)}. Nộp lúc ${fmtDate(doc.submittedAt)}.${why}</span></div></div>
+    ${teacherNote}
+    ${showScore ? `<div class="score" aria-label="Điểm ${fmtNum(g.score)} trên ${fmtNum(g.max)}">${fmtNum(g.score)}<small> / ${fmtNum(g.max)}</small></div><p class="lede">Đúng hoàn toàn ${g.correct}/${g.total} câu.${d.preview ? '' : ` Số lần vi phạm: ${doc.violations || 0}.`}</p>` : `<p class="big-note">Điểm số sẽ được giáo viên công bố sau.</p>`}
+    ${doc.comment ? `<h3>Nhận xét của thầy cô</h3><div class="comment">${esc(doc.comment)}</div>` : ''}
+    <p style="margin-top:20px"><button class="btn${toTeacher ? ' primary' : ''}" data-act="exit">${toTeacher ? 'Quay lại trang giáo viên' : 'Thoát'}</button></p>
+    ${showAns ? `<h2 style="margin-top:36px">Chi tiết bài làm</h2>${g.items.map(it => reviewHTML(it, key, showScore)).join('')}` : ''}
   </div>`;
 }
 function reviewHTML(it, key, showScore){
@@ -1172,6 +1243,226 @@ async function viewPast(){
   } catch(e){ toast(e.message || String(e), 'err'); }
 }
 
+/* ---------------- nhận xét, cài đặt đề, sao lưu ---------------- */
+async function editComment(id){
+  const s = S.res.subs && S.res.subs.find(x => x.id === id); if (!s) return;
+  const v = await modal({
+    title: `Nhận xét bài của ${s.name}`,
+    body: 'Học sinh xem được nhận xét khi mở lại bài đã nộp. Để trống rồi lưu để xoá nhận xét.',
+    input: 'textarea', value: s.comment || '', placeholder: 'VD: Em làm tốt phần hàm số, cần xem lại logarit.',
+    ok: 'Lưu nhận xét',
+    validate: async val => {
+      const text = val.trim().slice(0, 2000);
+      const body = { ...s }; delete body.id;
+      body.comment = text; body.commentAt = text ? Date.now() : null;
+      try { await S.be.set('subs', id, body); } catch(e){ return 'Không lưu được: ' + (e.message || e); }
+      s.comment = text; return '';
+    }
+  });
+  if (v !== null){ paintRes(); toast('Đã lưu nhận xét.'); }
+}
+async function setFlag(flag, val, el){
+  const E = S.res.exam; if (!E) return;
+  el.disabled = true;
+  try {
+    const fresh = await S.be.get('exams', E.code);
+    if (!fresh) throw new Error('Không tìm thấy đề');
+    fresh[flag] = val;
+    await S.be.set('exams', E.code, fresh);
+    E[flag] = val;
+    const x = S.exams.find(e => e.code === E.code); if (x) x[flag] = val;
+    toast('Đã cập nhật cài đặt của đề.');
+  } catch(e){ el.checked = !val; toast('Không cập nhật được: ' + (e.message || e), 'err'); }
+  el.disabled = false;
+}
+async function exportAll(btn){
+  if (!window.XLSX){ toast('Không tải được thư viện Excel. Kiểm tra mạng rồi tải lại trang.', 'err'); return; }
+  const old = btn.textContent; btn.disabled = true; btn.textContent = 'Đang gom dữ liệu…';
+  try {
+    const [exams, subsAll, prac] = await Promise.all([S.be.list('exams'), S.be.list('subs'), S.be.list('practice')]);
+    if (!exams.length) throw new Error('Chưa có đề nào để sao lưu.');
+    exams.sort((a, b) => a.createdAt - b.createdAt);
+    const byCode = new Map(exams.map(e => [e.code, e]));
+    const subs = subsAll.filter(x => x.status === 'done' && byCode.has(x.code))
+      .sort((a, b) => (byCode.get(a.code).createdAt - byCode.get(b.code).createdAt) || String(a.name).localeCompare(String(b.name), 'vi') || (a.submittedAt - b.submittedAt));
+    const mxOf = x => x.max != null ? x.max : maxScore(byCode.get(x.code));
+    const all = [['Mã đề', 'Tên đề', 'Ngày tạo đề', 'Họ tên', 'Lớp', 'Điểm', 'Điểm tối đa', 'Quy về thang 10', 'Số câu đúng', 'Tổng số câu', 'Vi phạm', 'Bắt đầu', 'Nộp lúc', 'Ghi chú', 'Nhận xét'],
+      ...subs.map(x => { const E = byCode.get(x.code), mx = mxOf(x); return [E.code, E.title, fmtDate(E.createdAt), x.name, x.cls || '', round2(x.score), mx, mx ? round2(x.score / mx * 10) : '', x.correct, x.total, x.violations || 0, fmtDate(x.startedAt), fmtDate(x.submittedAt), noteOf(x), x.comment || '']; })];
+    const stu = new Map();
+    subs.forEach(x => {
+      const k = x.nameKey || normName(x.name);
+      const r = stu.get(k) || { name: x.name, cls: '', m: new Map() };
+      const prev = r.m.get(x.code); if (!prev || x.submittedAt > prev.submittedAt) r.m.set(x.code, x);
+      r.name = x.name; if (x.cls) r.cls = x.cls; stu.set(k, r);
+    });
+    const used = exams.filter(e => subs.some(x => x.code === e.code));
+    const pivot = [['Họ tên', 'Lớp', ...used.map(e => `${e.title} (${e.code})`), 'Số đề đã làm', 'TB quy về thang 10'],
+      ...[...stu.values()].sort((a, b) => a.name.localeCompare(b.name, 'vi')).map(r => {
+        const tens = [];
+        const row = [r.name, r.cls, ...used.map(e => { const x = r.m.get(e.code); if (!x) return ''; const mx = mxOf(x); if (mx) tens.push(x.score / mx * 10); return round2(x.score); })];
+        row.push(r.m.size, tens.length ? round2(tens.reduce((a, b) => a + b, 0) / tens.length) : '');
+        return row;
+      })];
+    const list = [['Mã đề', 'Tên đề', 'Giáo viên', 'Số câu', 'Thời gian (phút)', 'Tổng điểm', 'Tạo lúc', 'Số bài nộp', 'Điểm trung bình'],
+      ...exams.map(e => { const ss = subs.filter(x => x.code === e.code); return [e.code, e.title, e.teacher, e.questions.length, e.duration, maxScore(e), fmtDate(e.createdAt), ss.length, ss.length ? round2(ss.reduce((a, x) => a + x.score, 0) / ss.length) : '']; })];
+    const pr = [['Họ tên', 'Số câu sai đã luyện đúng', 'Cập nhật lúc'], ...prac.map(x => [x.name || x.id, Object.keys(x.mastered || {}).length, fmtDate(x.updatedAt)])];
+    const wb = XLSX.utils.book_new();
+    const add = (rows, name, cols) => { const ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = cols.map(w => ({ wch: w })); XLSX.utils.book_append_sheet(wb, ws, name); };
+    add(pivot, 'Bảng điểm theo HS', [24, 8, ...used.map(() => 18), 12, 16]);
+    add(all, 'Tất cả bài nộp', [9, 28, 17, 24, 8, 7, 10, 14, 11, 11, 8, 17, 17, 22, 40]);
+    add(list, 'Danh sách đề', [9, 30, 20, 8, 14, 10, 17, 11, 14]);
+    add(pr, 'Luyện tập', [24, 24, 17]);
+    const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const d = new Date();
+    await S.be.save(`Sao_luu_ket_qua_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.xlsx`, new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  } catch(e){ if (!(e && e.code === 'declined')) toast('Không sao lưu được: ' + ((e && (e.message || e.code)) || e), 'err'); }
+  btn.disabled = false; btn.textContent = old;
+}
+
+/* ---------------- bài đã làm & luyện câu sai ---------------- */
+const paintMine = () => { const el = $('#h-area'); if (el) el.innerHTML = mineHTML(); };
+async function loadMine(){
+  const preview = S.view === 'teacher';
+  const inp = $('#h-name'); const name = inp.value.trim().replace(/\s+/g, ' '); const nk = normName(name);
+  if (!nk){ S.h = { name, preview, error: 'Nhập họ tên để xem bài đã làm.' }; paintMine(); inp.focus(); return; }
+  S.h = { name, preview, key: nk, loading: true }; paintMine();
+  try {
+    const [a, b, pr] = await Promise.all([S.be.list('subs', 'nameKey', nk), S.be.list('subs', 'name', name), S.be.get('practice', nk)]);
+    const latest = new Map();
+    [...a, ...b].forEach(x => { if (x.status !== 'done') return; const c = latest.get(x.code); if (!c || x.submittedAt > c.submittedAt) latest.set(x.code, x); });
+    const pairs = await Promise.all([...latest.values()].map(async sub => { const [exam, key] = await Promise.all([S.be.get('exams', sub.code), S.be.get('keys', sub.code)]); return { sub, exam, key }; }));
+    const items = pairs.filter(x => x.exam).sort((x, y) => y.sub.submittedAt - x.sub.submittedAt);
+    S.h = { name: (items[0] && items[0].sub.name) || name, preview, key: nk, loaded: true, items, mastered: { ...((pr && pr.mastered) || {}) }, onlyNew: true, pick: 'all' };
+    if (!preview) LS.setJSON('tt_student', { ...(LS.getJSON('tt_student') || {}), name });
+  } catch(e){ S.h = { name, preview, key: nk, error: 'Không tải được bài đã làm: ' + (e.message || e) }; }
+  paintMine();
+}
+function wrongItems(onlyNew, pick = 'all'){
+  const out = [];
+  for (const { sub, exam, key } of S.h.items || []){
+    if (!exam.showAnswers || !key || !key.answers) continue;
+    if (pick !== 'all' && exam.code !== pick) continue;
+    exam.questions.forEach((q, i) => {
+      const id = exam.code + '_' + q.n;
+      if (sub.perQ && sub.perQ[i]) return;
+      if (onlyNew && S.h.mastered[id]) return;
+      out.push({ id, exam, q, k: key.answers[q.n], sol: (key.sol && key.sol[q.n]) || [], prev: sub.answers ? sub.answers[q.n] : undefined });
+    });
+  }
+  return out;
+}
+function mineHTML(){
+  const H = S.h;
+  if (H.loading) return `<p class="hint" role="status" style="margin-top:12px">Đang tìm bài đã làm…</p>`;
+  if (H.error) return `<p style="margin-top:10px">${errSpan(H.error)}</p>`;
+  if (!H.loaded) return '';
+  if (!H.items.length) return `<div class="empty" style="margin-top:14px">Chưa tìm thấy bài nào đã nộp với tên “${esc(H.name)}”. Kiểm tra lại cách viết tên giống lúc vào thi.</div>`;
+  const all = wrongItems(false), fresh = wrongItems(true), pool = H.onlyNew ? fresh : all;
+  const groups = new Map(); pool.forEach(w => { const g = groups.get(w.exam.code) || { t: w.exam.title, n: 0 }; g.n++; groups.set(w.exam.code, g); });
+  const practice = all.length ? `<div class="practice-box"><h3 style="margin-top:0">Luyện lại câu sai</h3>
+      <p>${fresh.length ? `Còn <strong>${fresh.length}</strong> câu làm sai chưa luyện đúng` : 'Em đã luyện đúng hết các câu từng làm sai'} (tổng ${all.length} câu sai).</p>
+      <div class="row"><label class="field" style="flex:1 1 240px"><span class="sr">Chọn đề để luyện</span><select class="input" id="p-pick"><option value="all">Tất cả các đề (${pool.length} câu)</option>${[...groups].map(([c, g]) => `<option value="${esc(c)}" ${H.pick === c ? 'selected' : ''}>${esc(g.t)} (${g.n} câu)</option>`).join('')}</select></label>
+      <button class="btn primary" data-act="p-start" ${pool.length ? '' : 'disabled'}>Bắt đầu luyện</button></div>
+      <label class="check" style="margin-top:12px"><input type="checkbox" id="p-only" ${H.onlyNew ? 'checked' : ''}><span>Chỉ các câu chưa luyện đúng</span></label>
+      <p class="hint" style="margin-top:8px">Chỉ gồm các đề thầy cô đã cho xem đáp án. Luyện tập không tính điểm.</p></div>`
+    : `<p class="hint" style="margin-top:14px">Chưa có câu sai nào để luyện. Câu sai chỉ hiện ở các đề thầy cô đã cho xem đáp án.</p>`;
+  const list = `<div class="mine">${H.items.map(({ sub, exam }) => `<div class="mine-row"><div><div class="mine-t">${esc(exam.title)}</div><span class="hint">Mã ${esc(exam.code)}, nộp lúc ${fmtDate(sub.submittedAt)}</span>${sub.comment ? `<div class="comment"><strong>Nhận xét:</strong> ${esc(sub.comment)}</div>` : ''}</div>
+      <div class="row end">${exam.showScore ? `<span class="mine-score">${fmtNum(sub.score)} <small>/ ${fmtNum(sub.max != null ? sub.max : maxScore(exam))}</small></span>` : `<span class="hint">Chờ công bố điểm</span>`}${exam.showScore || exam.showAnswers ? `<button class="btn small" data-act="h-view" data-code="${esc(exam.code)}">Xem lại</button>` : ''}</div></div>`).join('')}</div>`;
+  return `<p class="hint" style="margin-top:14px">Tìm thấy ${H.items.length} đề đã nộp của ${esc(H.name)}.</p>${practice}<h3>Các bài đã nộp</h3>${list}`;
+}
+function viewMine(code){
+  const it = (S.h.items || []).find(x => x.exam.code === code); if (!it) return;
+  const key = it.key || { answers: {}, sol: {} };
+  S.done = { exam: it.exam, state: 'sent', g: grade(it.exam, key, it.sub.answers || {}), key, doc: it.sub, reason: 'past', asStudent: !!S.h.preview };
+  go('result');
+}
+function startPractice(list){
+  if (!list){ const pick = ($('#p-pick') && $('#p-pick').value) || 'all'; S.h.pick = pick; list = wrongItems(S.h.onlyNew, pick); }
+  if (!list.length){ toast('Không có câu nào để luyện.'); return; }
+  S.p = { list, idx: 0, ans: {}, res: {} };
+  if (!S.h.preview) S.role = 'student';
+  go('practice');
+}
+function practiceView(){
+  const P = S.p;
+  if (P.finished){
+    const tried = P.list.filter(w => P.res[w.id]), ok = P.list.filter(w => P.res[w.id] && P.res[w.id].ok), remain = P.list.filter(w => !(P.res[w.id] && P.res[w.id].ok));
+    return `<div class="wrap mid"><h1>Kết quả luyện tập</h1>
+      <p class="lede">Lần này em làm đúng ${ok.length}/${P.list.length} câu${tried.length < P.list.length ? `, bỏ qua ${P.list.length - tried.length} câu` : ''}. Câu đã làm đúng sẽ không hiện lại khi chọn “Chỉ các câu chưa luyện đúng”.</p>
+      <div class="row">${remain.length ? `<button class="btn primary" data-act="p-again">Luyện lại ${remain.length} câu chưa đúng</button>` : ''}<button class="btn" data-act="p-exit">Về trang học sinh</button></div></div>`;
+  }
+  return `<div class="wrap mid"><div class="row between" style="margin-top:22px"><div><strong>Luyện lại câu sai${S.h.preview ? ` của ${esc(S.h.name)} (giáo viên xem thử, không lưu)` : ''}</strong><span class="hint" id="p-count"></span></div><button class="btn small" data-act="p-exit">Kết thúc</button></div>
+    <div class="lbar" aria-hidden="true"><i id="p-bar"></i></div>
+    <section class="panel" id="pcard" style="margin-top:10px;scroll-margin-top:80px"></section></div>`;
+}
+function fillP(){
+  const P = S.p, w = P.list[P.idx], q = w.q;
+  $('#p-count').textContent = `Câu ${P.idx + 1}/${P.list.length}. Không tính điểm.`;
+  $('#p-bar').style.width = Math.round(Object.keys(P.res).length / P.list.length * 100) + '%';
+  $('#pcard').innerHTML = `<div class="qhead"><span class="qnum">Câu ${q.n}</span><span class="qtype">${esc(w.exam.title)}, ${TYPE_LABEL[q.type]}</span></div>
+    ${q.q.length ? q.q.map(r => `<img class="qimg" data-ref="${esc(r)}" alt="Đề câu ${q.n}">`).join('') : '<p class="hint">Câu này không có ảnh đề.</p>'}
+    <div class="answer-zone" id="p-zone"></div><div id="p-res" aria-live="polite"></div><div class="qnav" id="p-nav"></div>`;
+  hydrate($('#pcard'));
+  fillPZone(); fillPRes();
+}
+function fillPZone(){
+  const P = S.p, w = P.list[P.idx], q = w.q, a = P.ans[w.id], r = P.res[w.id], dis = r ? 'disabled' : '';
+  let z;
+  if (q.type === 'mc') z = `<div class="bubbles" role="group" aria-label="Chọn đáp án">${'ABCD'.split('').map(L => `<button class="bubble" data-act="p-mc" data-v="${L}" aria-pressed="${a === L}" ${dis}>${L}</button>`).join('')}</div>`;
+  else if (q.type === 'tf'){
+    const arr = Array.isArray(a) ? a : [null, null, null, null];
+    z = 'abcd'.split('').map((l, i) => { const good = r && w.k && arr[i] === w.k[i]; return `<div class="tf-row" role="group" aria-label="Ý ${l}"><span class="tf-label">${l})</span>${['Đ', 'S'].map(v => `<button class="bubble" data-act="p-tf" data-i="${i}" data-v="${v}" aria-pressed="${arr[i] === v}" aria-label="Ý ${l}: ${v === 'Đ' ? 'Đúng' : 'Sai'}" ${dis}>${v}</button>`).join('')}${r ? `<span class="tf-mark ${good ? 'ok' : 'bad'}">${good ? '✓ Đúng' : '✗ Đáp án ' + esc(w.k ? w.k[i] : '')}</span>` : ''}</div>`; }).join('');
+  }
+  else z = `<label class="field">Nhập đáp số<input class="input sa-input" id="p-sa" inputmode="decimal" autocomplete="off" value="${esc(a || '')}" placeholder="VD: -1,5" ${dis}></label>`;
+  $('#p-zone').innerHTML = z;
+  const sa = $('#p-sa');
+  if (sa && !r) sa.addEventListener('input', () => { if (sa.value.trim()) P.ans[w.id] = sa.value; else delete P.ans[w.id]; fillPNav(); });
+  fillPNav();
+}
+function fillPRes(){
+  const P = S.p, w = P.list[P.idx], r = P.res[w.id], el = $('#p-res');
+  if (!r){ el.innerHTML = ''; return; }
+  const verdict = w.q.type === 'tf' ? (r.ok ? 'Đúng cả 4 ý' : `Đúng ${r.nOk}/4 ý`) : r.ok ? 'Đúng rồi' : 'Chưa đúng';
+  el.innerHTML = `<div class="pres ${r.ok ? 'ok' : 'bad'}"><strong>${verdict}.</strong>
+    <dl class="ansline"><dt>Em trả lời</dt><dd>${esc(fmtAns(w.q, P.ans[w.id]))}</dd><dt>Đáp án đúng</dt><dd>${esc(w.k)}</dd><dt>Lúc thi em chọn</dt><dd>${esc(fmtAns(w.q, w.prev))}</dd></dl>
+    ${w.sol.length ? `<details ${r.ok ? '' : 'open'}><summary>Xem lời giải</summary>${w.sol.map(x => `<img class="qimg" data-ref="${esc(x)}" alt="Lời giải câu ${w.q.n}">`).join('')}</details>` : '<p class="hint">Câu này không có ảnh lời giải.</p>'}</div>`;
+  hydrate(el);
+}
+function fillPNav(){
+  const P = S.p, w = P.list[P.idx], r = P.res[w.id], last = P.idx === P.list.length - 1;
+  const go2 = last ? 'p-finish' : 'p-next';
+  $('#p-nav').innerHTML = `<button class="btn" data-act="p-prev" ${P.idx === 0 ? 'disabled' : ''}>Câu trước</button>` + (r
+    ? `<div class="row">${r.ok ? '' : '<button class="btn" data-act="p-retry">Làm lại câu này</button>'}<button class="btn primary" data-act="${go2}">${last ? 'Xem kết quả' : 'Câu tiếp'}</button></div>`
+    : `<div class="row"><button class="btn ghost" data-act="${go2}">${last ? 'Kết thúc' : 'Bỏ qua'}</button><button class="btn primary" data-act="p-check" ${isFull(w.q, P.ans[w.id]) ? '' : 'disabled'}>Kiểm tra</button></div>`);
+}
+let pSaving = false, pDirty = false;
+async function savePractice(){
+  if (!S.h.key || S.h.preview) return;
+  if (pSaving){ pDirty = true; return; }
+  pSaving = true;
+  try { await S.be.set('practice', S.h.key, { name: S.h.name, nameKey: S.h.key, mastered: S.h.mastered, updatedAt: Date.now() }); }
+  catch(e){ toast('Chưa lưu được tiến độ luyện tập.', 'err'); }
+  pSaving = false;
+  if (pDirty){ pDirty = false; savePractice(); }
+}
+function pCheck(){
+  const P = S.p, w = P.list[P.idx], a = P.ans[w.id];
+  if (!isFull(w.q, a)) return;
+  let ok, nOk = null;
+  if (w.q.type === 'mc') ok = a === w.k;
+  else if (w.q.type === 'tf'){ nOk = 0; for (let i = 0; i < 4; i++) if (w.k && a[i] === w.k[i]) nOk++; ok = nOk === 4; }
+  else ok = matchSA(a, w.k);
+  P.res[w.id] = { ok, nOk };
+  fillPZone(); fillPRes();
+  $('#p-bar').style.width = Math.round(Object.keys(P.res).length / P.list.length * 100) + '%';
+  if (ok && !S.h.preview && !S.h.mastered[w.id]){ S.h.mastered[w.id] = Date.now(); savePractice(); }
+}
+function pMove(i){
+  const P = S.p; if (i < 0 || i >= P.list.length) return;
+  P.idx = i; fillP();
+  const c = $('#pcard'); if (c.getBoundingClientRect().top < 70) c.scrollIntoView({ block: 'start' });
+}
+
 /* ---------------- sự kiện ---------------- */
 document.addEventListener('click', e => {
   const im = e.target.closest('.qimg[src]');
@@ -1182,9 +1473,9 @@ document.addEventListener('click', async e => {
   const A = el.dataset.act;
   const x = S.x;
   switch (A){
-    case 'home': if (S.view === 'exam') return; S.role = null; go('home'); break;
+    case 'home': if (S.view === 'exam') return; S.role = null; if (S.h.preview) S.h = { name: '' }; go('home'); break;
     case 'role-teacher': openTeacher(); break;
-    case 'role-student': S.role = 'student'; go('student'); break;
+    case 'role-student': S.role = 'student'; if (S.h.preview) S.h = { name: '' }; go('student'); break;
     case 'ttab': stopLive(); S.ttab = el.dataset.k; render(); if (S.ttab !== 'create') loadExams(); break;
     case 'import': doImport(); break;
     case 'q-add': addQ(); break;
@@ -1208,7 +1499,25 @@ document.addEventListener('click', async e => {
     case 'goto': if (x) moveTo(+el.dataset.i); break;
     case 'submit': submitExam(); break;
     case 'resend': S.done.state = 'sending'; render(); sendResult(); break;
-    case 'exit': S.done = null; if (S.st.exam){ try { S.st.exam = await S.be.get('exams', S.st.exam.code) || S.st.exam; } catch(err){} } go('student'); break;
+    case 'cmt': editComment(el.dataset.id); break;
+    case 'sub-view': viewSub(el.dataset.id); break;
+    case 'pv-start': startPreview(); break;
+    case 'pv-exit': if (S.x && S.x.sess.preview && await modal({ title: 'Thoát xem thử?', body: 'Bài làm thử sẽ bị bỏ, không lưu lại.', ok: 'Thoát xem thử' })){ clearInterval(S.xTick); S.x = null; go('teacher'); } break;
+    case 'export-all': exportAll(el); break;
+    case 'h-load': loadMine(); break;
+    case 'h-view': viewMine(el.dataset.code); break;
+    case 'p-start': startPractice(); break;
+    case 'p-mc': if (S.p){ const w = S.p.list[S.p.idx]; if (S.p.res[w.id]) break; if (S.p.ans[w.id] === el.dataset.v) delete S.p.ans[w.id]; else S.p.ans[w.id] = el.dataset.v; fillPZone(); } break;
+    case 'p-tf': if (S.p){ const w = S.p.list[S.p.idx]; if (S.p.res[w.id]) break; const arr = Array.isArray(S.p.ans[w.id]) ? [...S.p.ans[w.id]] : [null, null, null, null]; const i = +el.dataset.i; arr[i] = arr[i] === el.dataset.v ? null : el.dataset.v; if (arr.every(v => !v)) delete S.p.ans[w.id]; else S.p.ans[w.id] = arr; fillPZone(); } break;
+    case 'p-check': pCheck(); break;
+    case 'p-retry': if (S.p){ const w = S.p.list[S.p.idx]; delete S.p.res[w.id]; delete S.p.ans[w.id]; fillPZone(); fillPRes(); } break;
+    case 'p-prev': pMove(S.p.idx - 1); break;
+    case 'p-next': pMove(S.p.idx + 1); break;
+    case 'p-finish': S.p.finished = true; render(); window.scrollTo(0, 0); break;
+    case 'p-again': startPractice(S.p.list.filter(w => !(S.p.res[w.id] && S.p.res[w.id].ok))); break;
+    case 'p-exit': S.p = null; go(S.h.preview ? 'teacher' : 'student'); break;
+    case 'exit': if (S.done && (S.done.preview || S.done.teacher || S.done.asStudent)){ S.done = null; go('teacher'); break; }
+      S.done = null; if (S.st.exam){ try { S.st.exam = await S.be.get('exams', S.st.exam.code) || S.st.exam; } catch(err){} } go('student'); break;
   }
 });
 function onField(e){
@@ -1226,6 +1535,9 @@ function onField(e){
 document.addEventListener('input', onField);
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.dataset.flag){ setFlag(t.dataset.flag, t.checked, t); return; }
+  if (t.id === 'p-only'){ S.h.onlyNew = t.checked; S.h.pick = 'all'; paintMine(); return; }
+  if (t.id === 'p-pick'){ S.h.pick = t.value; return; }
   if (t.id === 'f-excel'){ S.draft.excelFile = t.files[0] || null; $('#f-excel-name').textContent = S.draft.excelFile ? S.draft.excelFile.name : 'Chưa chọn file'; return; }
   if (t.id === 'f-imgs'){ S.draft.imageFiles = [...t.files]; $('#f-imgs-name').textContent = t.files.length ? `${t.files.length} file đã chọn` : 'Chưa chọn file'; return; }
   if (t.dataset.slot){
@@ -1242,6 +1554,7 @@ document.addEventListener('keydown', e => {
   const id = e.target.id;
   if (id === 'code'){ e.preventDefault(); checkCode(); }
   else if (id === 'st-name' || id === 'st-cls'){ e.preventDefault(); begin(); }
+  else if (id === 'h-name'){ e.preventDefault(); loadMine(); }
 });
 document.addEventListener('mouseover', e => { const c = e.target.closest('.qcol'); if (c && $('#rate-detail')) $('#rate-detail').innerHTML = rateDetail(+c.dataset.i); });
 document.addEventListener('focusin', e => { const c = e.target.closest && e.target.closest('.qcol'); if (c && $('#rate-detail')) $('#rate-detail').innerHTML = rateDetail(+c.dataset.i); });
@@ -1249,7 +1562,7 @@ document.addEventListener('mouseout', e => { const ch = e.target.closest && e.ta
 document.addEventListener('visibilitychange', () => document.hidden ? onAway() : onBack());
 window.addEventListener('blur', onAway);
 window.addEventListener('focus', onBack);
-window.addEventListener('beforeunload', e => { if (S.view === 'exam' && S.x && !S.x.submitting){ e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', e => { if (S.view === 'exam' && S.x && !S.x.submitting && !S.x.sess.preview){ e.preventDefault(); e.returnValue = ''; } });
 
 /* ---------------- khởi động ---------------- */
 (async () => {
