@@ -272,6 +272,37 @@ textarea.input{resize:vertical;min-height:120px;line-height:1.5;font-family:inhe
 .set-box .mine{border-top-color:var(--line)}
 .status-wait{color:var(--muted);font-weight:600}
 
+/* kho câu sai */
+.bank-filters{display:flex;gap:12px 16px;flex-wrap:wrap;align-items:flex-end;margin:4px 0 10px}
+.bank-sum{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:99px;font-size:13px;font-weight:600;border:1px solid var(--line);background:var(--surface);line-height:1.6}
+.chip.bad{border-color:var(--red);color:var(--red);background:var(--red-soft)}
+.chip.ok{border-color:var(--green);color:var(--green);background:var(--green-soft)}
+.chip.info{border-color:var(--pen);color:var(--pen);background:var(--pen-soft)}
+.bank-type{margin-top:26px}
+.bank-type h3{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0;padding-bottom:8px;border-bottom:2px solid var(--ink)}
+.bank-type h3 .check{margin-left:auto;font-size:14px}
+.bank-row{display:grid;grid-template-columns:auto 170px minmax(0,1fr) auto;gap:12px 14px;align-items:center;padding:10px 6px;border-bottom:1px solid var(--line);border-radius:6px}
+.bank-row.sel{background:var(--pen-soft)}
+.bank-row input[type=checkbox]{width:20px;height:20px;accent-color:var(--pen);margin:0}
+.bank-thumb{display:block;width:170px;height:64px;object-fit:contain;object-position:left center;background:#fff;border:1px solid var(--line);border-radius:4px}
+.bank-thumb:not([src]){background:var(--grid)}
+.bank-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.bank-bar{position:sticky;bottom:8px;z-index:15;margin-top:20px;padding:14px 16px;background:var(--surface);border:2px solid var(--ink);border-radius:12px;display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;box-shadow:0 -6px 24px rgba(0,0,0,.12)}
+.bank-bar .field{min-width:170px}
+.bank-count{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+.modal.wide .qimg{margin-bottom:8px}
+@media (max-width:640px){
+  .bank-row{grid-template-columns:auto minmax(0,1fr)}
+  .bank-row > input{grid-row:1 / span 3;align-self:start;margin-top:4px}
+  .bank-row > :not(input){grid-column:2}
+  .bank-thumb{width:100%;height:auto;max-height:100px}
+  .bank-row > .btn{justify-self:start}
+  .bank-bar{position:static;box-shadow:none}
+  .bank-type h3 .check{margin-left:0;flex-basis:100%}
+  .bank-bar .field{min-width:0;flex:1 1 100%}
+}
+
 /* modal & toast */
 .modal-bg{position:fixed;inset:0;z-index:60;background:color-mix(in srgb,#0A0F1A 55%,transparent);display:grid;place-items:center;padding:16px}
 .modal{width:min(460px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--surface);border:2px solid var(--ink);border-radius:12px;padding:22px}
@@ -663,6 +694,7 @@ function render(){
   $('#app').innerHTML = VIEWS[S.view]();
   if (S.view === 'exam'){ fillQ(); fillSheet(); xTick(); }
   if (S.view === 'teacher' && S.ttab === 'live' && S.live.watching) paintLive();
+  if (S.view === 'teacher' && S.ttab === 'bank') hydrate($('#tpanel'));
   if (S.view === 'result') hydrate($('#app'));
   if (S.view === 'practice' && S.p && !S.p.finished) fillP();
 }
@@ -710,10 +742,10 @@ async function openTeacher(){
 
 /* ---------------- giáo viên ---------------- */
 function teacherView(){
-  const tabs = [['create', 'Tạo đề'], ['manage', 'Quản lý đề'], ['live', 'Theo dõi trực tiếp'], ['results', 'Kết quả'], ['psets', 'Bài luyện tập'], ['preview', 'Xem như học sinh']];
+  const tabs = [['create', 'Tạo đề'], ['manage', 'Quản lý đề'], ['live', 'Theo dõi trực tiếp'], ['results', 'Kết quả'], ['bank', 'Kho câu sai'], ['psets', 'Bài luyện tập'], ['preview', 'Xem như học sinh']];
   return `<div class="wrap">${modeNotice()}<nav class="subtabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" class="subtab" aria-selected="${S.ttab === k}" data-act="ttab" data-k="${k}">${l}</button>`).join('')}</nav><div id="tpanel">${tpanelHTML()}</div></div>`;
 }
-const tpanelHTML = () => S.ttab === 'create' ? createTab() : S.ttab === 'live' ? liveTab() : S.ttab === 'preview' ? previewTab() : S.ttab === 'manage' ? manageTab() : S.ttab === 'psets' ? psetTab() : resultsTab();
+const tpanelHTML = () => S.ttab === 'create' ? createTab() : S.ttab === 'live' ? liveTab() : S.ttab === 'preview' ? previewTab() : S.ttab === 'manage' ? manageTab() : S.ttab === 'psets' ? psetTab() : S.ttab === 'bank' ? bankTab() : resultsTab();
 function manageTab(){
   if (!S.exams.length) return `<section class="block"><h2>Quản lý đề</h2><div class="empty">Chưa có đề nào. Tạo đề ở mục “Tạo đề”.</div></section>`;
   const now = Date.now();
@@ -795,7 +827,7 @@ function viewSub(id){
 async function loadExams(){
   try { S.exams = (await S.be.list('exams')).sort((a, b) => b.createdAt - a.createdAt); }
   catch(e){ S.exams = []; toast('Không tải được danh sách đề.', 'err'); }
-  if (S.view === 'teacher' && S.ttab !== 'create'){ $('#tpanel').innerHTML = tpanelHTML(); if (S.ttab === 'live' && S.live.watching) paintLive(); }
+  if (S.view === 'teacher' && S.ttab !== 'create'){ $('#tpanel').innerHTML = tpanelHTML(); if (S.ttab === 'live' && S.live.watching) paintLive(); if (S.ttab === 'bank') hydrate($('#tpanel')); }
 }
 function examSelect(id, cur){
   if (!S.exams.length) return `<span class="hint">Chưa có đề nào. Tạo đề ở mục “Tạo đề”.</span>`;
@@ -1188,8 +1220,12 @@ async function checkCode(){
   msg.innerHTML = '<span class="hint">Đang kiểm tra…</span>';
   try {
     const E = await S.be.get('exams', code);
+    const keep = { n: $('#st-name') && $('#st-name').value, c: $('#st-cls') && $('#st-cls').value, h: $('#h-name') && $('#h-name').value };
     S.st = { code, exam: E };
     render();
+    if (keep.n && $('#st-name')) $('#st-name').value = keep.n;
+    if (keep.c && $('#st-cls')) $('#st-cls').value = keep.c;
+    if (keep.h && $('#h-name')) $('#h-name').value = keep.h;
     if (!E){ $('#code-msg').innerHTML = errSpan(`Không tìm thấy đề có mã ${code}. Kiểm tra lại mã với giáo viên.`); $('#code').focus(); return; }
     const n = $('#st-name'); if (n) n.focus();
   } catch(e){ msg.innerHTML = errSpan('Không kết nối được hệ thống: ' + (e.message || e)); }
@@ -1530,7 +1566,7 @@ function practiceView(){
   if (P.finished){
     const tried = P.list.filter(w => P.res[w.id]), ok = P.list.filter(w => P.res[w.id] && P.res[w.id].ok), remain = P.list.filter(w => !(P.res[w.id] && P.res[w.id].ok));
     return `<div class="wrap mid"><h1>Kết quả luyện tập</h1>
-      <p class="lede">Lần này em làm đúng ${ok.length}/${P.list.length} câu${tried.length < P.list.length ? `, bỏ qua ${P.list.length - tried.length} câu` : ''}.${P.set ? (() => { const pr = S.h.prog[P.set.id]; const done = pr ? Object.values(pr.items || {}).filter(v => v.ok).length : 0; return ` Cả bài “${esc(P.set.title)}”: đã làm đúng ${Math.min(done, P.set.total)}/${P.set.total} câu.${P.closed || done >= P.set.total ? '' : ' Lần sau bấm “Làm tiếp” để làm các câu còn lại.'}`; })() : ' Câu đã làm đúng sẽ không hiện lại khi chọn “Chỉ các câu chưa luyện đúng”.'}${P.closed ? ' Bài luyện tập đã đến giờ đóng.' : ''}</p>
+      <p class="lede">Lần này em làm đúng ${ok.length}/${P.list.length} câu${tried.length < P.list.length ? `, bỏ qua ${P.list.length - tried.length} câu` : ''}.${P.set ? (() => { const stObj = (S.h.sets || []).find(x => x.id === P.set.id); const done = stObj ? setDoneCount(stObj, P.set.total) : 0; return ` Cả bài “${esc(P.set.title)}”: đã làm đúng ${Math.min(done, P.set.total)}/${P.set.total} câu.${P.closed || done >= P.set.total ? '' : ' Lần sau bấm “Làm tiếp” để làm các câu còn lại.'}`; })() : ' Câu đã làm đúng sẽ không hiện lại khi chọn “Chỉ các câu chưa luyện đúng”.'}${P.closed ? ' Bài luyện tập đã đến giờ đóng.' : ''}</p>
       <div class="row">${remain.length ? `<button class="btn primary" data-act="p-again">Luyện lại ${remain.length} câu chưa đúng</button>` : ''}<button class="btn" data-act="p-exit">Về trang học sinh</button></div></div>`;
   }
   return `<div class="wrap mid"><div class="row between" style="margin-top:22px"><div><strong>${P.set ? 'Bài luyện tập: ' + esc(P.set.title) : 'Luyện lại câu sai'}${S.h.preview ? ` của ${esc(S.h.name)} (giáo viên xem thử, không lưu)` : ''}</strong><span class="hint" id="p-count"></span></div><button class="btn small" data-act="p-exit">Kết thúc</button></div>
@@ -1598,7 +1634,7 @@ function pCheck(){
   P.res[w.id] = { ok, nOk };
   fillPZone(); fillPRes();
   $('#p-bar').style.width = Math.round(Object.keys(P.res).length / P.list.length * 100) + '%';
-  if (ok && !S.h.preview && !S.h.mastered[w.id]){ S.h.mastered[w.id] = Date.now(); savePractice(); }
+  if (ok && !S.h.preview){ S.h.mastered[w.id] = Date.now(); savePractice(); }
   if (P.set && !S.h.preview){
     const pr = S.h.prog[P.set.id]; const it = pr.items[w.id] || { ok: false, tries: 0 };
     it.tries = (it.tries || 0) + 1; if (ok) it.ok = true; pr.items[w.id] = it;
@@ -1613,7 +1649,29 @@ function pMove(i){
 
 /* ---------------- bài luyện tập được giao ---------------- */
 const setState = (st, now = Date.now()) => st.openAt && now < st.openAt ? 'wait' : st.closeAt && now > st.closeAt ? 'closed' : 'open';
+function pickIds(st){
+  const latest = new Map((S.h.items || []).map(it => [it.exam.code, it]));
+  return (st.items || []).filter(id => {
+    const [code, n] = String(id).split('_'); const it = latest.get(code); if (!it) return false;
+    const i = it.exam.questions.findIndex(q => String(q.n) === n);
+    return i >= 0 && !(it.sub.perQ && it.sub.perQ[i]);
+  });
+}
+function isDone(st, id){
+  const pr = S.h.prog[st.id];
+  if (pr && pr.items && pr.items[id] && pr.items[id].ok) return true;
+  if (st.mode !== 'pick') return false;
+  const m = S.h.mastered && S.h.mastered[id]; if (!m) return false;
+  const it = (S.h.items || []).find(x => x.exam.code === String(id).split('_')[0]);
+  return !!(it && m > it.sub.submittedAt);
+}
+function setDoneCount(st, total){
+  if (st.mode === 'pick') return pickIds(st).filter(id => isDone(st, id)).length;
+  const pr = S.h.prog[st.id];
+  return pr ? Math.min(total, Object.values(pr.items || {}).filter(v => v.ok).length) : 0;
+}
 function setCount(st){
+  if (st.mode === 'pick') return pickIds(st).length;
   const latest = new Map((S.h.items || []).map(it => [it.exam.code, it]));
   let n = 0;
   for (const c of st.codes || []){
@@ -1625,16 +1683,16 @@ function setCount(st){
 }
 function setsHTML(){
   const H = S.h, now = Date.now();
-  const sets = (H.sets || []).filter(st => setState(st, now) !== 'closed');
+  const sets = (H.sets || []).filter(st => setState(st, now) !== 'closed' && (!st.students || st.students.includes(H.key)) && !(st.mode === 'pick' && !setCount(st)));
   if (!sets.length) return '';
   return `<div class="practice-box set-box"><h3 style="margin-top:0">Bài luyện tập thầy cô giao</h3><div class="mine">${sets.map(st => {
     const total = setCount(st), pr = H.prog[st.id];
-    const ok = pr ? Math.min(total, Object.values(pr.items || {}).filter(v => v.ok).length) : 0;
+    const ok = setDoneCount(st, total), started = !!pr || ok > 0;
     const wait = setState(st, now) === 'wait';
     const when = wait ? `Mở lúc ${fmtDate(st.openAt)}` : `Đang mở${st.closeAt ? `, đóng lúc ${fmtDate(st.closeAt)}` : ''}`;
     const btn = wait ? '<span class="hint">Chưa đến giờ</span>' : !total ? '<span class="hint">Không có câu nào</span>'
-      : `<button class="btn primary small" data-act="ps-start" data-id="${esc(st.id)}">${pr && ok >= total ? 'Làm lại từ đầu' : pr && ok > 0 ? 'Làm tiếp' : 'Bắt đầu'}</button>`;
-    return `<div class="mine-row"><div><div class="mine-t">${esc(st.title)}</div><span class="hint">${(st.codes || []).length} đề, ${total} câu${st.mode === 'wrong' ? ' em cần luyện' : ''}. ${when}.</span>${pr ? `<span class="hint">Đã làm đúng ${ok}/${total} câu.</span>` : ''}</div><div class="row end">${btn}</div></div>`;
+      : `<button class="btn primary small" data-act="ps-start" data-id="${esc(st.id)}">${started && ok >= total ? 'Làm lại từ đầu' : ok > 0 ? 'Làm tiếp' : 'Bắt đầu'}</button>`;
+    return `<div class="mine-row"><div><div class="mine-t">${esc(st.title)}</div><span class="hint">${st.mode === 'pick' ? `${total} câu sai thầy cô chọn cho em làm lại` : `${(st.codes || []).length} đề, ${total} câu${st.mode === 'wrong' ? ' em cần luyện' : ''}`}. ${when}.</span>${started ? `<span class="hint">Đã làm đúng ${ok}/${total} câu.</span>` : ''}</div><div class="row end">${btn}</div></div>`;
   }).join('')}</div><p class="hint" style="margin-top:8px">Đến giờ mở mà chưa thấy nút Bắt đầu, bấm “Xem bài đã làm” lần nữa để tải lại.</p></div>`;
 }
 async function examPair(code){
@@ -1645,6 +1703,15 @@ async function examPair(code){
 async function setItems(st){
   const latest = new Map((S.h.items || []).map(it => [it.exam.code, it]));
   const out = [];
+  if (st.mode === 'pick'){
+    for (const id of pickIds(st)){
+      const [code, n] = id.split('_'); const it = latest.get(code);
+      const q = it.exam.questions.find(x => String(x.n) === n);
+      if (!q || !it.key || !it.key.answers) continue;
+      out.push({ id, exam: it.exam, q, k: it.key.answers[q.n], sol: (it.key.sol && it.key.sol[q.n]) || [], prev: it.sub.answers ? it.sub.answers[q.n] : undefined, untaken: false });
+    }
+    return out;
+  }
   for (const code of st.codes || []){
     const it = latest.get(code);
     let exam, key, sub = null;
@@ -1666,7 +1733,7 @@ async function startSet(id){
   try { items = await setItems(st); } catch(e){ toast('Không tải được câu hỏi: ' + (e.message || e), 'err'); return; }
   if (!items.length){ toast('Bài luyện tập không có câu nào cho em.'); return; }
   const pr = S.h.prog[st.id] || (S.h.prog[st.id] = { setId: st.id, items: {}, round: 1 });
-  let list = items.filter(w => !(pr.items[w.id] && pr.items[w.id].ok));
+  let list = items.filter(w => !isDone(st, w.id));
   if (!list.length){ list = items; Object.values(pr.items).forEach(v => { v.ok = false; }); pr.round = (+pr.round || 1) + 1; }
   pr.total = items.length;
   startPractice(list, { id: st.id, title: st.title, closeAt: st.closeAt || null, total: items.length });
@@ -1711,7 +1778,7 @@ function psetTab(){
   </section>
   <section class="block"><h2>Bài luyện tập đã giao</h2>
     ${S.psets === undefined ? '<p class="hint" role="status">Đang tải…</p>' : sets.length ? `<div class="table-wrap"><table><thead><tr><th>Tên bài</th><th></th><th>Trạng thái</th><th>Các đề</th><th>Nội dung</th><th>Mở lúc</th><th>Đóng lúc</th></tr></thead><tbody>
-    ${sets.map(st => `<tr><td><strong>${esc(st.title)}</strong></td><td><div class="row nowrap"><button class="btn small" data-act="ps-prog" data-id="${esc(st.id)}">Tình hình</button><button class="btn small" data-act="ps-edit" data-id="${esc(st.id)}">Sửa giờ</button><button class="btn small danger" data-act="ps-del" data-id="${esc(st.id)}">Xoá</button></div></td><td>${stTxt(st)}</td><td style="white-space:normal;min-width:200px">${(st.codes || []).map(c => esc(title(c))).join(', ')}</td><td>${st.mode === 'all' ? 'Tất cả câu' : 'Câu làm sai'}</td><td>${st.openAt ? fmtDate(st.openAt) : 'Mở ngay'}</td><td>${st.closeAt ? fmtDate(st.closeAt) : '–'}</td></tr>`).join('')}
+    ${sets.map(st => `<tr><td><strong>${esc(st.title)}</strong></td><td><div class="row nowrap"><button class="btn small" data-act="ps-prog" data-id="${esc(st.id)}">Tình hình</button><button class="btn small" data-act="ps-edit" data-id="${esc(st.id)}">Sửa giờ</button><button class="btn small danger" data-act="ps-del" data-id="${esc(st.id)}">Xoá</button></div></td><td>${stTxt(st)}</td><td style="white-space:normal;min-width:200px">${(st.codes || []).map(c => esc(title(c))).join(', ')}</td><td style="white-space:normal;min-width:150px">${st.mode === 'pick' ? `${(st.items || []).length} câu chọn từ kho câu sai${st.studentNames && st.studentNames.length ? ', giao cho ' + esc(st.studentNames.join(', ')) : ''}` : st.mode === 'all' ? 'Tất cả câu' : 'Câu làm sai'}</td><td>${st.openAt ? fmtDate(st.openAt) : 'Mở ngay'}</td><td>${st.closeAt ? fmtDate(st.closeAt) : '–'}</td></tr>`).join('')}
     </tbody></table></div>` : '<div class="empty">Chưa giao bài luyện tập nào.</div>'}
   </section>`;
 }
@@ -1773,6 +1840,148 @@ async function psetProgress(id){
   await modal({ title: `Tình hình: ${st.title}`, html, wide: true, ok: 'Đóng', cancel: '' });
 }
 
+/* ---------------- kho câu sai (giáo viên) ---------------- */
+async function loadBank(){
+  const prev = S.bank || {};
+  S.bank = { st: prev.st || 'all', code: prev.code || 'all', title: prev.title || '', open: prev.open || '', close: prev.close || '', sel: prev.sel || new Set(), loaded: prev.loaded, items: prev.items, students: prev.students, psets: prev.psets, loading: true };
+  if (!prev.loaded) paintBank();
+  try {
+    const [exams, subs, keys, prac, psets] = await Promise.all([S.be.list('exams'), S.be.list('subs'), S.be.list('keys'), S.be.list('practice'), S.be.list('psets')]);
+    const stu = new Map();
+    subs.filter(x => x.status === 'done').forEach(x => {
+      const nk = x.nameKey || normName(x.name); if (!nk) return;
+      const r = stu.get(nk) || { nk, name: x.name, latest: new Map() };
+      const pv = r.latest.get(x.code); if (!pv || x.submittedAt > pv.submittedAt){ r.latest.set(x.code, x); r.name = x.name; }
+      stu.set(nk, r);
+    });
+    const mastered = {}; prac.forEach(x => { mastered[x.nameKey || x.id] = x.mastered || {}; });
+    const keyBy = new Map(keys.map(k => [k.code || k.id, k]));
+    const items = [];
+    exams.sort((a, b) => a.createdAt - b.createdAt).forEach(E => {
+      const key = keyBy.get(E.code);
+      E.questions.forEach((q, i) => {
+        const id = E.code + '_' + q.n, wrong = [];
+        stu.forEach(r => {
+          const sub = r.latest.get(E.code);
+          if (!sub || (sub.perQ && sub.perQ[i])) return;
+          const m = mastered[r.nk] && mastered[r.nk][id];
+          wrong.push({ nk: r.nk, name: r.name, ans: sub.answers ? sub.answers[q.n] : undefined, fixed: !!(m && m > sub.submittedAt) });
+        });
+        if (wrong.length) items.push({ id, E, q, k: key && key.answers ? key.answers[q.n] : undefined, sol: (key && key.sol && key.sol[q.n]) || [], wrong });
+      });
+    });
+    const B = S.bank;
+    B.items = items; B.psets = psets;
+    B.students = [...stu.values()].map(r => ({ nk: r.nk, name: r.name })).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+    if (B.st !== 'all' && !B.students.some(x => x.nk === B.st)) B.st = 'all';
+    if (B.code !== 'all' && !exams.some(e => e.code === B.code)) B.code = 'all';
+    const live = new Set(bankVisible().map(it => it.id));
+    B.sel = new Set([...B.sel].filter(id => live.has(id)));
+    B.loaded = true; B.loading = false; B.error = '';
+  } catch(e){ S.bank.loading = false; S.bank.error = 'Không tải được kho câu sai: ' + (e.message || e); }
+  paintBank();
+}
+function paintBank(){ if (S.view === 'teacher' && S.ttab === 'bank'){ $('#tpanel').innerHTML = bankTab(); hydrate($('#tpanel')); } }
+const pending = (it, nk) => it.wrong.some(w => !w.fixed && (nk === 'all' || w.nk === nk));
+function bankVisible(){
+  const B = S.bank;
+  return (B.items || []).filter(it => (B.code === 'all' || it.E.code === B.code) && pending(it, B.st));
+}
+function bankTab(){
+  const B = S.bank || {};
+  if (!B.loaded) return `<section class="block"><h2>Kho câu sai</h2>${B.error ? `<p>${errSpan(B.error)}</p><button class="btn" data-act="bank-reload">Thử lại</button>` : '<p class="hint" role="status">Đang gom các câu làm sai…</p>'}</section>`;
+  const vis = bankVisible();
+  const byType = { mc: [], tf: [], sa: [] }; vis.forEach(it => (byType[it.q.type] || byType.mc).push(it));
+  const inExam = it => B.code === 'all' || it.E.code === B.code;
+  const allN = (B.items || []).filter(it => inExam(it) && pending(it, 'all')).length;
+  const exams = []; const seen = new Set();
+  (B.items || []).forEach(it => { if (!seen.has(it.E.code) && pending(it, B.st)){ seen.add(it.E.code); exams.push(it.E); } });
+  const selIn = t => byType[t].filter(it => B.sel.has(it.id)).length;
+  const section = t => `<div class="bank-type"><h3>${TYPE_LABEL[t]}<span class="count-badge">${byType[t].length}</span>${byType[t].length ? `<label class="check"><input type="checkbox" data-bank-all="${t}" ${selIn(t) === byType[t].length ? 'checked' : ''}><span>Chọn tất cả</span></label>` : ''}</h3>
+    ${byType[t].length ? byType[t].map(bankRow).join('') : '<p class="hint" style="padding:10px 4px">Không có câu sai dạng này.</p>'}</div>`;
+  const who = B.st === 'all' ? 'Mỗi em chỉ nhận những câu em đó làm sai và chưa làm lại đúng.' : `Chỉ giao cho ${esc((B.students.find(x => x.nk === B.st) || {}).name || '')}.`;
+  return `<section class="block">
+    <div class="row between"><h2 style="margin:0">Kho câu sai</h2><button class="btn small" data-act="bank-reload">${B.loading ? 'Đang tải…' : 'Tải lại'}</button></div>
+    <p class="hint" style="margin:8px 0 14px">Gom các câu học sinh làm sai trong lần nộp gần nhất của mỗi đề. Em nào làm lại đúng (qua bài thầy giao hoặc tự luyện) thì câu được đánh dấu xong. Câu nhiều em cùng sai chỉ rời khỏi kho khi tất cả các em đó đều đã làm lại đúng.</p>
+    <div class="bank-filters">
+      <label class="field">Học sinh<select class="input" id="bk-st"><option value="all">Tất cả học sinh (${allN} câu)</option>${B.students.map(x => `<option value="${esc(x.nk)}" ${B.st === x.nk ? 'selected' : ''}>${esc(x.name)} (${(B.items || []).filter(it => inExam(it) && pending(it, x.nk)).length} câu)</option>`).join('')}</select></label>
+      <label class="field">Đề<select class="input" id="bk-code"><option value="all">Tất cả các đề</option>${exams.map(e => `<option value="${esc(e.code)}" ${B.code === e.code ? 'selected' : ''}>${esc(e.title)}</option>`).join('')}${B.code !== 'all' && !seen.has(B.code) ? `<option value="${esc(B.code)}" selected>(đề đã chọn)</option>` : ''}</select></label>
+      <div class="bank-sum">${['mc', 'tf', 'sa'].map(t => `<span class="chip">${TYPE_LABEL[t]}: ${byType[t].length}</span>`).join('')}</div>
+    </div>
+    ${vis.length ? ['mc', 'tf', 'sa'].map(section).join('') : `<div class="empty">${(B.items || []).length ? 'Không còn câu sai nào cần làm lại với bộ lọc này.' : 'Chưa có câu sai nào. Kho sẽ có dữ liệu sau khi học sinh nộp bài.'}</div>`}
+    ${vis.length ? `<div class="bank-bar">
+      <div><div class="bank-count" id="bk-count">${B.sel.size}</div><span class="hint">câu đã chọn</span></div>
+      <label class="field" style="flex:2 1 220px">Tên bài làm lại<input class="input" id="bk-title" value="${esc(B.title)}" placeholder="VD: Làm lại câu sai tuần 3"></label>
+      <label class="field">Mở lúc (tuỳ chọn)<input class="input" type="datetime-local" id="bk-open" value="${esc(B.open)}"></label>
+      <label class="field">Đóng lúc (tuỳ chọn)<input class="input" type="datetime-local" id="bk-close" value="${esc(B.close)}"></label>
+      <div class="row"><button class="btn primary" data-act="bank-assign" ${B.sel.size ? '' : 'disabled'}>Giao làm lại</button><button class="btn ghost" data-act="bank-clear" ${B.sel.size ? '' : 'disabled'}>Bỏ chọn</button></div>
+      <p class="hint" style="flex-basis:100%;margin:0">${who}</p>
+    </div>` : ''}
+  </section>`;
+}
+function bankRow(it){
+  const B = S.bank, on = B.sel.has(it.id), q = it.q;
+  const chips = it.wrong.map(w => w.fixed
+    ? `<span class="chip ok">${esc(w.name)}: đã làm lại đúng ✓</span>`
+    : `<span class="chip bad">${esc(w.name)}: ${isFull(q, w.ans) ? 'chọn ' + esc(fmtAns(q, w.ans)) : 'bỏ trống'}</span>`).join('');
+  const now = Date.now();
+  const tags = (B.psets || []).filter(ps => ps.mode === 'pick' && setState(ps, now) !== 'closed' && (ps.items || []).includes(it.id))
+    .map(ps => `<span class="chip info">Đã giao: ${esc(ps.title)}</span>`).join('');
+  return `<div class="bank-row ${on ? 'sel' : ''}">
+    <input type="checkbox" data-bank="${esc(it.id)}" ${on ? 'checked' : ''} aria-label="Chọn ${esc(it.E.title)}, câu ${q.n}">
+    ${q.q.length ? `<img class="bank-thumb" data-ref="${esc(q.q[0])}" alt="Ảnh câu ${q.n}">` : '<span class="hint">Không có ảnh</span>'}
+    <div><div><strong>${esc(it.E.title)}, câu ${q.n}</strong> <span class="hint" style="display:inline">Đáp án: ${esc(it.k != null ? it.k : '?')}</span></div><div class="bank-chips">${chips}${tags}</div></div>
+    <button class="btn small" data-act="bank-view" data-id="${esc(it.id)}">Xem câu</button>
+  </div>`;
+}
+function bankSyncBar(){
+  const B = S.bank;
+  const c = $('#bk-count'); if (c) c.textContent = B.sel.size;
+  $$('[data-act="bank-assign"],[data-act="bank-clear"]').forEach(b => { b.disabled = !B.sel.size; });
+  $$('[data-bank-all]').forEach(box => { const ids = bankVisible().filter(it => it.q.type === box.dataset.bankAll).map(it => it.id); box.checked = ids.length > 0 && ids.every(id => B.sel.has(id)); });
+}
+function bankToggle(id, on){
+  const B = S.bank;
+  if (on) B.sel.add(id); else B.sel.delete(id);
+  const box = $(`[data-bank="${CSS.escape(id)}"]`);
+  if (box){ box.checked = on; box.closest('.bank-row').classList.toggle('sel', on); }
+}
+async function bankView(id){
+  const it = (S.bank.items || []).find(x => x.id === id); if (!it) return;
+  const q = it.q;
+  const html = `<p class="hint">${esc(TYPE_LABEL[q.type])}. Đáp án đúng: <strong>${esc(it.k != null ? it.k : '?')}</strong></p>
+    ${q.q.map(r => `<img class="qimg" data-ref="${esc(r)}" alt="Đề câu ${q.n}">`).join('') || '<p class="hint">Câu này không có ảnh đề.</p>'}
+    <dl class="ansline">${it.wrong.map(w => `<dt>${esc(w.name)}</dt><dd>${esc(fmtAns(q, w.ans))}${w.fixed ? ' <span class="chip ok">đã làm lại đúng</span>' : ''}</dd>`).join('')}</dl>
+    ${it.sol.length ? `<details><summary>Xem lời giải</summary>${it.sol.map(r => `<img class="qimg" data-ref="${esc(r)}" alt="Lời giải câu ${q.n}">`).join('')}</details>` : ''}`;
+  const done = modal({ title: `${it.E.title}, câu ${q.n}`, html, wide: true, ok: 'Đóng', cancel: '' });
+  hydrate($('#modal-root'));
+  await done;
+}
+async function bankAssign(){
+  const B = S.bank;
+  const chosen = (B.items || []).filter(it => B.sel.has(it.id));
+  if (!chosen.length) return;
+  const openV = ($('#bk-open') || {}).value || '', closeV = ($('#bk-close') || {}).value || '';
+  const openAt = openV ? new Date(openV).getTime() : null, closeAt = closeV ? new Date(closeV).getTime() : null;
+  if (closeAt && closeAt <= (openAt || Date.now())){ toast('Giờ đóng phải sau giờ mở và sau thời điểm hiện tại.', 'err'); return; }
+  const students = B.st === 'all' ? null : [B.st];
+  const targets = students ? B.students.filter(x => x.nk === B.st) : B.students;
+  const per = targets.map(x => ({ name: x.name, n: chosen.filter(it => it.wrong.some(w => w.nk === x.nk && !w.fixed)).length })).filter(x => x.n);
+  if (!per.length){ toast('Các câu đã chọn không còn em nào cần làm lại.', 'err'); return; }
+  const title = (($('#bk-title') || {}).value || '').trim() || `Làm lại câu sai ${fmtDate(Date.now())}`;
+  const body = `Giao “${title}” gồm ${chosen.length} câu. ${per.map(x => `${x.name}: ${x.n} câu`).join(', ')}.${openAt ? ` Mở lúc ${fmtDate(openAt)}.` : ' Mở ngay.'}${closeAt ? ` Đóng lúc ${fmtDate(closeAt)}.` : ''}`;
+  if (!await modal({ title: 'Giao làm lại các câu đã chọn?', body, ok: 'Giao làm lại' })) return;
+  const id = 'P' + rid(9);
+  const ids = chosen.map(it => it.id);
+  try {
+    await S.be.set('psets', id, { id, title, mode: 'pick', items: ids, codes: [...new Set(ids.map(x => x.split('_')[0]))], counts: {}, students, studentNames: students ? targets.map(x => x.name) : null, openAt, closeAt, createdAt: Date.now(), teacher: LS.get('tt_teacher') || '' });
+    B.sel = new Set(); B.title = ''; B.open = ''; B.close = '';
+    toast(openAt && openAt > Date.now() ? `Đã giao, mở lúc ${fmtDate(openAt)}.` : 'Đã giao, học sinh làm được ngay.');
+    S.psets = undefined;
+    loadBank();
+  } catch(e){ toast('Không giao được: ' + (e.message || e), 'err'); }
+}
+
 /* ---------------- sự kiện ---------------- */
 document.addEventListener('click', e => {
   const im = e.target.closest('.qimg[src]');
@@ -1786,7 +1995,7 @@ document.addEventListener('click', async e => {
     case 'home': if (S.view === 'exam') return; S.role = null; if (S.h.preview) S.h = { name: '' }; go('home'); break;
     case 'role-teacher': openTeacher(); break;
     case 'role-student': S.role = 'student'; if (S.h.preview) S.h = { name: '' }; go('student'); break;
-    case 'ttab': stopLive(); S.ttab = el.dataset.k; render(); if (S.ttab !== 'create') loadExams(); if (S.ttab === 'psets') loadPsets(); break;
+    case 'ttab': stopLive(); S.ttab = el.dataset.k; render(); if (S.ttab !== 'create') loadExams(); if (S.ttab === 'psets') loadPsets(); if (S.ttab === 'bank') loadBank(); break;
     case 'import': doImport(); break;
     case 'q-add': addQ(); break;
     case 'q-del': delQ(+el.dataset.i); break;
@@ -1829,6 +2038,10 @@ document.addEventListener('click', async e => {
     case 'p-finish': S.p.finished = true; render(); window.scrollTo(0, 0); break;
     case 'p-again': startPractice(S.p.list.filter(w => !(S.p.res[w.id] && S.p.res[w.id].ok)), S.p.set); break;
     case 'ps-start': startSet(el.dataset.id); break;
+    case 'bank-reload': loadBank(); break;
+    case 'bank-view': bankView(el.dataset.id); break;
+    case 'bank-assign': bankAssign(); break;
+    case 'bank-clear': S.bank.sel = new Set(); $$('[data-bank]').forEach(b => { b.checked = false; b.closest('.bank-row').classList.remove('sel'); }); bankSyncBar(); break;
     case 'ps-create': createPset(); break;
     case 'ps-prog': psetProgress(el.dataset.id); break;
     case 'ps-edit': editPset(el.dataset.id); break;
@@ -1850,10 +2063,15 @@ function onField(e){
     const er = $('#qerr-' + i); if (er) er.textContent = answerError(q);
   }
 }
+document.addEventListener('input', e => { if (e.target.id === 'bk-title' && S.bank) S.bank.title = e.target.value; });
 document.addEventListener('input', onField);
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.dataset.flag){ setFlag(t.dataset.flag, t.checked, t); return; }
+  if (t.dataset.bank){ bankToggle(t.dataset.bank, t.checked); bankSyncBar(); return; }
+  if (t.dataset.bankAll){ bankVisible().filter(it => it.q.type === t.dataset.bankAll).forEach(it => bankToggle(it.id, t.checked)); bankSyncBar(); return; }
+  if (t.id === 'bk-st' || t.id === 'bk-code'){ S.bank[t.id === 'bk-st' ? 'st' : 'code'] = t.value; S.bank.sel = new Set(); paintBank(); return; }
+  if (t.id === 'bk-open' || t.id === 'bk-close'){ S.bank[t.id === 'bk-open' ? 'open' : 'close'] = t.value; return; }
   if (t.name === 'ps-code'){ const c = $('#ps-count'); if (c) c.textContent = $$('input[name="ps-code"]:checked').length; return; }
   if (t.id === 'p-only'){ S.h.onlyNew = t.checked; S.h.pick = 'all'; paintMine(); return; }
   if (t.id === 'p-pick'){ S.h.pick = t.value; return; }
