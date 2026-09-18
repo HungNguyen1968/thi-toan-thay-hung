@@ -1217,10 +1217,11 @@ function studentView(){
   const st = S.st, me = LS.getJSON('tt_student') || {};
   return `<div class="wrap narrow"><h1>Vào thi</h1>${modeNotice()}
     <div class="panel">
-      <label class="field" for="code">Mã đề</label>
+      <label class="field" for="code">Mã đề hoặc mã bài luyện tập</label>
       <div class="row nowrap" style="margin-top:6px"><input class="input code-input" id="code" value="${esc(st.code)}" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="VD: 7KQ2MX"><button class="btn" data-act="check-code">Kiểm tra mã đề</button></div>
       <div id="code-msg" role="status" style="margin-top:8px"></div>
-      ${st.exam ? examInfoHTML(st.exam) : ''}
+      ${st.exam ? examInfoHTML(st.exam) : st.pset ? setInfoHTML(st.pset) : ''}
+      <p class="hint" style="margin-top:12px">Nhập mã đề để vào thi, hoặc mã bài luyện tập thầy cô giao để làm lại câu sai.</p>
     </div>
     <h2 class="section-h">Bài đã làm và luyện tập</h2>
     <div class="panel">
@@ -1229,6 +1230,36 @@ function studentView(){
       <div class="row nowrap" style="margin-top:6px"><input class="input" id="h-name" autocomplete="name" value="${esc(S.h.name || me.name || '')}"><button class="btn" data-act="h-load">Xem bài đã làm</button></div>
       <div id="h-area">${mineHTML()}</div>
     </div></div>`;
+}
+function setInfoHTML(st){
+  const now = Date.now(), stt = setState(st, now), me = LS.getJSON('tt_student') || {};
+  const info = `<dl class="facts"><div><dt>Nội dung</dt><dd>${st.mode === 'pick' ? 'Các câu sai thầy cô chọn' : st.mode === 'all' ? 'Tất cả câu của các đề' : 'Các câu em đã làm sai'}</dd></div>
+    <div><dt>Thời gian làm bài</dt><dd>${+st.duration ? st.duration + ' phút' : 'Không giới hạn'}</dd></div>
+    ${st.openAt ? `<div><dt>Mở lúc</dt><dd>${fmtDate(st.openAt)}</dd></div>` : ''}${st.closeAt ? `<div><dt>Đóng lúc</dt><dd>${fmtDate(st.closeAt)}</dd></div>` : ''}</dl>`;
+  const block = stt === 'wait' ? `<div class="notice">Bài luyện tập mở lúc ${fmtDate(st.openAt)}. Em quay lại sau giờ này nhé.</div>`
+    : stt === 'closed' ? `<div class="notice bad">Bài luyện tập đã đóng lúc ${fmtDate(st.closeAt)}.</div>`
+    : `<div class="form-grid two"><label class="field">Họ và tên<input class="input" id="ps-name" autocomplete="name" value="${esc(S.h.name || me.name || '')}"></label></div>
+      <div id="ps-err" class="error" role="alert" style="margin-bottom:8px"></div>
+      <button class="btn primary big wide" data-act="ps-enter" data-id="${esc(st.id)}">Vào làm bài luyện tập</button>
+      <p class="hint" style="margin-top:10px">Nhập họ tên giống lúc vào thi. Bài luyện tập không tính điểm, mỗi câu làm xong được xem đáp án và lời giải ngay.</p>`;
+  return `<div class="exam-info"><h2>${esc(st.title)}</h2><p class="hint" style="margin:-6px 0 10px">Bài luyện tập${st.teacher ? ' của ' + esc(st.teacher) : ''}</p>${info}${block}</div>`;
+}
+async function enterSetByCode(id){
+  const st = S.st.pset; if (!st) return;
+  const inp = $('#ps-name'), err = $('#ps-err');
+  const name = inp.value.trim().replace(/\s+/g, ' ');
+  if (!normName(name)){ err.textContent = 'Nhập họ và tên để vào làm bài.'; inp.focus(); return; }
+  err.textContent = ''; const btn = $('[data-act="ps-enter"]'); btn.disabled = true; btn.textContent = 'Đang tải bài…';
+  try {
+    await loadMine(name);
+    if (S.h.error){ err.textContent = S.h.error; return; }
+    const fresh = (S.h.sets || []).find(x => x.id === id);
+    if (!fresh){ err.textContent = 'Không tìm thấy bài luyện tập này nữa. Hỏi lại thầy cô.'; return; }
+    if (fresh.students && !fresh.students.includes(S.h.key)){ err.textContent = `Bài này thầy cô giao cho bạn khác. Kiểm tra lại họ tên hoặc mã bài.`; return; }
+    if (!setCount(fresh)){ err.textContent = 'Em không có câu nào cần làm lại trong bài này. Kiểm tra lại họ tên đã gõ đúng chưa.'; return; }
+    await startSet(id);
+  } catch(e){ err.textContent = 'Không vào được: ' + (e.message || e); }
+  finally { if (btn.isConnected){ btn.disabled = false; btn.textContent = 'Vào làm bài luyện tập'; } }
 }
 function gate(E){
   const now = Date.now();
@@ -1267,15 +1298,15 @@ async function checkCode(){
   if (!/^[A-Z0-9]{3,12}$/.test(code)){ msg.innerHTML = errSpan('Mã đề chỉ gồm chữ và số.'); return; }
   msg.innerHTML = '<span class="hint">Đang kiểm tra…</span>';
   try {
-    const E = await S.be.get('exams', code);
+    const [E, P] = await Promise.all([S.be.get('exams', code), S.be.get('psets', code)]);
     const keep = { n: $('#st-name') && $('#st-name').value, c: $('#st-cls') && $('#st-cls').value, h: $('#h-name') && $('#h-name').value };
-    S.st = { code, exam: E };
+    S.st = { code, exam: E, pset: E ? null : P };
     render();
     if (keep.n && $('#st-name')) $('#st-name').value = keep.n;
     if (keep.c && $('#st-cls')) $('#st-cls').value = keep.c;
     if (keep.h && $('#h-name')) $('#h-name').value = keep.h;
-    if (!E){ $('#code-msg').innerHTML = errSpan(`Không tìm thấy đề có mã ${code}. Kiểm tra lại mã với giáo viên.`); $('#code').focus(); return; }
-    const n = $('#st-name'); if (n) n.focus();
+    if (!E && !P){ $('#code-msg').innerHTML = errSpan(`Không tìm thấy đề hay bài luyện tập có mã ${code}. Kiểm tra lại mã với giáo viên.`); $('#code').focus(); return; }
+    const n = $('#st-name') || $('#ps-name'); if (n) n.focus();
   } catch(e){ msg.innerHTML = errSpan('Không kết nối được hệ thống: ' + (e.message || e)); }
 }
 const subDoc = (s, E) => ({ vlog: s.vlog || [], multi: !!(s.flags && s.flags.multi), awayNow: !!(S.x && S.x.sess === s && (S.x.away || S.x.fsEntry)), code: s.code, name: s.name, nameKey: normName(s.name), cls: s.cls, status: 'doing', answers: s.answers, answered: countAnswered(E, s.answers), total: E.questions.length, violations: s.violations, startedAt: s.startedAt, endAt: s.endAt, extraMin: +s.extraMin || 0, updatedAt: Date.now(), device: s.device });
@@ -1632,10 +1663,12 @@ async function exportAll(btn){
 
 /* ---------------- bài đã làm & luyện câu sai ---------------- */
 const paintMine = () => { const el = $('#h-area'); if (el) el.innerHTML = mineHTML(); };
-async function loadMine(){
-  const preview = S.view === 'teacher';
-  const inp = $('#h-name'); const name = inp.value.trim().replace(/\s+/g, ' '); const nk = normName(name);
-  if (!nk){ S.h = { name, preview, error: 'Nhập họ tên để xem bài đã làm.' }; paintMine(); inp.focus(); return; }
+async function loadMine(nameArg){
+  const preview = nameArg == null && S.view === 'teacher';
+  const inp = $('#h-name');
+  const name = (nameArg != null ? nameArg : inp ? inp.value : '').trim().replace(/\s+/g, ' ');
+  const nk = normName(name);
+  if (!nk){ S.h = { name, preview, error: 'Nhập họ tên để xem bài đã làm.' }; paintMine(); if (inp) inp.focus(); return; }
   S.h = { name, preview, key: nk, loading: true }; paintMine();
   try {
     const [a, b, pr, sets, progs] = await Promise.all([S.be.list('subs', 'nameKey', nk), S.be.list('subs', 'name', name), S.be.get('practice', nk), S.be.list('psets').catch(() => []), S.be.list('presults', 'nameKey', nk).catch(() => [])]);
@@ -1906,6 +1939,23 @@ async function saveSetProg(id){
 }
 
 /* giáo viên */
+async function freeCode(){
+  let code = '';
+  for (let t = 0; t < 8; t++){
+    code = rid(6);
+    const [a, b] = await Promise.all([S.be.get('exams', code), S.be.get('psets', code)]);
+    if (!a && !b) break;
+  }
+  return code;
+}
+async function setCodeModal(st){
+  const when = st.openAt && st.openAt > Date.now() ? `Bài mở lúc ${fmtDate(st.openAt)}.` : 'Học sinh làm được ngay.';
+  await modal({
+    title: 'Đã giao bài luyện tập',
+    html: `<p>Gửi mã này cho học sinh. Các em nhập vào ô <strong>Mã đề</strong> ở trang Học sinh rồi nhập họ tên là vào làm được bài “${esc(st.title)}”.</p><div class="code-bubbles" aria-label="Mã bài luyện tập ${esc(st.code)}">${st.code.split('').map(c => `<span>${c}</span>`).join('')}</div><p class="hint" style="text-align:center">${esc(when)}${+st.duration ? ` Thời gian làm bài ${st.duration} phút.` : ''}</p>`,
+    ok: 'Sao chép mã', cancel: 'Đóng'
+  }).then(ok => { if (ok && navigator.clipboard) navigator.clipboard.writeText(st.code).then(() => toast('Đã sao chép mã ' + st.code)).catch(() => toast('Mã bài luyện tập: ' + st.code)); });
+}
 async function loadPsets(){
   try { S.psets = (await S.be.list('psets')).sort((a, b) => b.createdAt - a.createdAt); }
   catch(e){ S.psets = []; toast('Không tải được danh sách bài luyện tập.', 'err'); }
@@ -1931,8 +1981,8 @@ function psetTab(){
     : `<div class="empty">Chưa có đề nào. Tạo đề trước rồi quay lại đây.</div>`}
   </section>
   <section class="block"><h2>Bài luyện tập đã giao</h2>
-    ${S.psets === undefined ? '<p class="hint" role="status">Đang tải…</p>' : sets.length ? `<div class="table-wrap"><table><thead><tr><th>Tên bài</th><th></th><th>Trạng thái</th><th>Các đề</th><th>Nội dung</th><th>Thời gian làm</th><th>Mở lúc</th><th>Đóng lúc</th></tr></thead><tbody>
-    ${sets.map(st => `<tr><td><strong>${esc(st.title)}</strong></td><td><div class="row nowrap"><button class="btn small" data-act="ps-prog" data-id="${esc(st.id)}">Tình hình</button><button class="btn small" data-act="ps-edit" data-id="${esc(st.id)}">Sửa giờ, thời gian</button><button class="btn small danger" data-act="ps-del" data-id="${esc(st.id)}">Xoá</button></div></td><td>${stTxt(st)}</td><td style="white-space:normal;min-width:200px">${(st.codes || []).map(c => esc(title(c))).join(', ')}</td><td style="white-space:normal;min-width:150px">${st.mode === 'pick' ? `${(st.items || []).length} câu chọn từ kho câu sai${st.studentNames && st.studentNames.length ? ', giao cho ' + esc(st.studentNames.join(', ')) : ''}` : st.mode === 'all' ? 'Tất cả câu' : 'Câu làm sai'}</td><td>${+st.duration ? st.duration + ' phút' : 'Không giới hạn'}</td><td>${st.openAt ? fmtDate(st.openAt) : 'Mở ngay'}</td><td>${st.closeAt ? fmtDate(st.closeAt) : '–'}</td></tr>`).join('')}
+    ${S.psets === undefined ? '<p class="hint" role="status">Đang tải…</p>' : sets.length ? `<div class="table-wrap"><table><thead><tr><th>Tên bài</th><th>Mã bài</th><th></th><th>Trạng thái</th><th>Các đề</th><th>Nội dung</th><th>Thời gian làm</th><th>Mở lúc</th><th>Đóng lúc</th></tr></thead><tbody>
+    ${sets.map(st => `<tr><td><strong>${esc(st.title)}</strong></td><td><strong class="code-inline">${esc(st.code || st.id)}</strong></td><td><div class="row nowrap"><button class="btn small" data-act="ps-prog" data-id="${esc(st.id)}">Tình hình</button><button class="btn small" data-act="ps-edit" data-id="${esc(st.id)}">Sửa giờ, thời gian</button><button class="btn small danger" data-act="ps-del" data-id="${esc(st.id)}">Xoá</button></div></td><td>${stTxt(st)}</td><td style="white-space:normal;min-width:200px">${(st.codes || []).map(c => esc(title(c))).join(', ')}</td><td style="white-space:normal;min-width:150px">${st.mode === 'pick' ? `${(st.items || []).length} câu chọn từ kho câu sai${st.studentNames && st.studentNames.length ? ', giao cho ' + esc(st.studentNames.join(', ')) : ''}` : st.mode === 'all' ? 'Tất cả câu' : 'Câu làm sai'}</td><td>${+st.duration ? st.duration + ' phút' : 'Không giới hạn'}</td><td>${st.openAt ? fmtDate(st.openAt) : 'Mở ngay'}</td><td>${st.closeAt ? fmtDate(st.closeAt) : '–'}</td></tr>`).join('')}
     </tbody></table></div>` : '<div class="empty">Chưa giao bài luyện tập nào.</div>'}
   </section>`;
 }
@@ -1948,12 +1998,14 @@ async function createPset(){
   const openAt = openV ? new Date(openV).getTime() : null, closeAt = closeV ? new Date(closeV).getTime() : null;
   if (closeAt && closeAt <= (openAt || Date.now())){ msg.innerHTML = errSpan('Giờ đóng phải sau giờ mở và sau thời điểm hiện tại.'); return; }
   const counts = {}; codes.forEach(c => { const e = S.exams.find(x => x.code === c); counts[c] = e ? e.questions.length : 0; });
-  const id = 'P' + rid(9);
   btn.disabled = true; msg.textContent = 'Đang lưu…';
   try {
-    await S.be.set('psets', id, { id, title: title || `Luyện tập ${fmtDate(Date.now())}`, codes, counts, mode, openAt, closeAt, duration: Math.round(+durV), createdAt: Date.now(), teacher: LS.get('tt_teacher') || '' });
-    toast(openAt && openAt > Date.now() ? `Đã giao bài, mở lúc ${fmtDate(openAt)}.` : 'Đã giao bài luyện tập, học sinh làm được ngay.');
+    const id = await freeCode();
+    const doc = { id, code: id, title: title || `Luyện tập ${fmtDate(Date.now())}`, codes, counts, mode, openAt, closeAt, duration: Math.round(+durV), createdAt: Date.now(), teacher: LS.get('tt_teacher') || '' };
+    await S.be.set('psets', id, doc);
+    msg.textContent = '';
     await loadPsets();
+    await setCodeModal(doc);
   } catch(e){ msg.innerHTML = errSpan('Không lưu được: ' + (e.message || e)); btn.disabled = false; }
 }
 async function editPset(id){
@@ -2143,14 +2195,15 @@ async function bankAssign(){
   const title = (($('#bk-title') || {}).value || '').trim() || `Làm lại câu sai ${fmtDate(Date.now())}`;
   const body = `Giao “${title}” gồm ${chosen.length} câu. ${per.map(x => `${x.name}: ${x.n} câu`).join(', ')}.${openAt ? ` Mở lúc ${fmtDate(openAt)}.` : ' Mở ngay.'}${closeAt ? ` Đóng lúc ${fmtDate(closeAt)}.` : ''}${+durV ? ` Thời gian làm bài ${Math.round(+durV)} phút.` : ''}`;
   if (!await modal({ title: 'Giao làm lại các câu đã chọn?', body, ok: 'Giao làm lại' })) return;
-  const id = 'P' + rid(9);
   const ids = chosen.map(it => it.id);
   try {
-    await S.be.set('psets', id, { id, title, mode: 'pick', items: ids, codes: [...new Set(ids.map(x => x.split('_')[0]))], counts: {}, students, studentNames: students ? targets.map(x => x.name) : null, openAt, closeAt, duration: Math.round(+durV), createdAt: Date.now(), teacher: LS.get('tt_teacher') || '' });
+    const id = await freeCode();
+    const doc = { id, code: id, title, mode: 'pick', items: ids, codes: [...new Set(ids.map(x => x.split('_')[0]))], counts: {}, students, studentNames: students ? targets.map(x => x.name) : null, openAt, closeAt, duration: Math.round(+durV), createdAt: Date.now(), teacher: LS.get('tt_teacher') || '' };
+    await S.be.set('psets', id, doc);
     B.sel = new Set(); B.title = ''; B.open = ''; B.close = ''; B.dur = 0;
-    toast(openAt && openAt > Date.now() ? `Đã giao, mở lúc ${fmtDate(openAt)}.` : 'Đã giao, học sinh làm được ngay.');
     S.psets = undefined;
     loadBank();
+    await setCodeModal(doc);
   } catch(e){ toast('Không giao được: ' + (e.message || e), 'err'); }
 }
 
@@ -2282,6 +2335,7 @@ document.addEventListener('click', async e => {
     case 'p-finish': S.p.finished = true; render(); window.scrollTo(0, 0); break;
     case 'p-again': startPractice(S.p.list.filter(w => !(S.p.res[w.id] && S.p.res[w.id].ok)), S.p.set); break;
     case 'ps-start': startSet(el.dataset.id); break;
+    case 'ps-enter': enterSetByCode(el.dataset.id); break;
     case 'bank-reload': loadBank(); break;
     case 'fs-enter': enterFS(); break;
     case 'vlog': showVlog(el.dataset.id); break;
@@ -2341,6 +2395,7 @@ document.addEventListener('keydown', e => {
   if (id === 'code'){ e.preventDefault(); checkCode(); }
   else if (id === 'st-name' || id === 'st-cls'){ e.preventDefault(); begin(); }
   else if (id === 'h-name'){ e.preventDefault(); loadMine(); }
+  else if (id === 'ps-name'){ e.preventDefault(); const b = $('[data-act="ps-enter"]'); if (b) enterSetByCode(b.dataset.id); }
 });
 document.addEventListener('mouseover', e => { const c = e.target.closest('.qcol'); if (c && $('#rate-detail')) $('#rate-detail').innerHTML = rateDetail(+c.dataset.i); });
 document.addEventListener('focusin', e => { const c = e.target.closest && e.target.closest('.qcol'); if (c && $('#rate-detail')) $('#rate-detail').innerHTML = rateDetail(+c.dataset.i); });
