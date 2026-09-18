@@ -321,6 +321,11 @@ body.in-exam .qimg{-webkit-user-drag:none;pointer-events:auto}
   body.in-exam::after{content:"Không được in bài thi.";display:block;padding:40px;font-size:20px}
 }
 
+.p-timer{font-weight:800;font-variant-numeric:tabular-nums;font-size:20px;margin-left:10px}
+.p-timer.low{color:var(--red)}
+.rq-old{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0 14px}
+.rq-old img{max-height:90px;border:1px solid var(--line);border-radius:4px;background:#fff}
+
 /* modal & toast */
 .modal-bg{position:fixed;inset:0;z-index:60;background:color-mix(in srgb,#0A0F1A 55%,transparent);display:grid;place-items:center;padding:16px}
 .modal{width:min(460px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--surface);border:2px solid var(--ink);border-radius:12px;padding:22px}
@@ -677,6 +682,7 @@ function modal({ title, body = '', html = '', input = null, value = '', placehol
       close(v);
     };
     const key = e => {
+      if (el !== $('#modal-root').lastElementChild) return;
       if (e.key === 'Escape' && cancel){ e.preventDefault(); no(); }
       else if (e.key === 'Enter'){ const f = document.activeElement; if (f && f.tagName === 'TEXTAREA' && !(e.ctrlKey || e.metaKey)) return; e.preventDefault(); if (f && f.dataset && f.dataset.m === 'no') no(); else yes(); }
       else if (e.key === 'Tab'){ const fs = $$('button,input,textarea', el); const i = fs.indexOf(document.activeElement); if (e.shiftKey && i <= 0){ e.preventDefault(); fs[fs.length - 1].focus(); } else if (!e.shiftKey && i === fs.length - 1){ e.preventDefault(); fs[0].focus(); } }
@@ -715,7 +721,7 @@ function render(){
   if (S.view === 'teacher' && S.ttab === 'live' && S.live.watching) paintLive();
   if (S.view === 'teacher' && S.ttab === 'bank') hydrate($('#tpanel'));
   if (S.view === 'result') hydrate($('#app'));
-  if (S.view === 'practice' && S.p && !S.p.finished) fillP();
+  if (S.view === 'practice' && S.p && !S.p.finished){ fillP(); pTick(); }
 }
 function go(v){ if (v !== 'teacher') stopLive(); S.view = v; render(); window.scrollTo(0, 0); }
 
@@ -1686,6 +1692,8 @@ function startPractice(list, set){
   if (!list){ const pick = ($('#p-pick') && $('#p-pick').value) || 'all'; S.h.pick = pick; list = wrongItems(S.h.onlyNew, pick); }
   if (!list.length){ toast('Không có câu nào để luyện.'); return; }
   S.p = { list, idx: 0, ans: {}, res: {}, set: set || null };
+  clearInterval(S.pTick);
+  if (set && set.endAt) S.pTick = setInterval(pTick, 1000);
   if (!S.h.preview) S.role = 'student';
   go('practice');
 }
@@ -1694,12 +1702,19 @@ function practiceView(){
   if (P.finished){
     const tried = P.list.filter(w => P.res[w.id]), ok = P.list.filter(w => P.res[w.id] && P.res[w.id].ok), remain = P.list.filter(w => !(P.res[w.id] && P.res[w.id].ok));
     return `<div class="wrap mid"><h1>Kết quả luyện tập</h1>
-      <p class="lede">Lần này em làm đúng ${ok.length}/${P.list.length} câu${tried.length < P.list.length ? `, bỏ qua ${P.list.length - tried.length} câu` : ''}.${P.set ? (() => { const stObj = (S.h.sets || []).find(x => x.id === P.set.id); const done = stObj ? setDoneCount(stObj, P.set.total) : 0; return ` Cả bài “${esc(P.set.title)}”: đã làm đúng ${Math.min(done, P.set.total)}/${P.set.total} câu.${P.closed || done >= P.set.total ? '' : ' Lần sau bấm “Làm tiếp” để làm các câu còn lại.'}`; })() : ' Câu đã làm đúng sẽ không hiện lại khi chọn “Chỉ các câu chưa luyện đúng”.'}${P.closed ? ' Bài luyện tập đã đến giờ đóng.' : ''}</p>
-      <div class="row">${remain.length ? `<button class="btn primary" data-act="p-again">Luyện lại ${remain.length} câu chưa đúng</button>` : ''}<button class="btn" data-act="p-exit">Về trang học sinh</button></div></div>`;
+      <p class="lede">Lần này em làm đúng ${ok.length}/${P.list.length} câu${tried.length < P.list.length ? `, bỏ qua ${P.list.length - tried.length} câu` : ''}.${P.set ? (() => { const stObj = (S.h.sets || []).find(x => x.id === P.set.id); const done = stObj ? setDoneCount(stObj, P.set.total) : 0; return ` Cả bài “${esc(P.set.title)}”: đã làm đúng ${Math.min(done, P.set.total)}/${P.set.total} câu.${P.closed || P.timeUp || done >= P.set.total ? '' : ' Lần sau bấm “Làm tiếp” để làm các câu còn lại.'}`; })() : ' Câu đã làm đúng sẽ không hiện lại khi chọn “Chỉ các câu chưa luyện đúng”.'}${P.closed ? ' Bài luyện tập đã đến giờ đóng.' : ''}${P.timeUp ? ' Đã hết thời gian làm bài của bài luyện tập này.' : ''}</p>
+      <div class="row">${remain.length && !P.timeUp && !P.closed ? `<button class="btn primary" data-act="p-again">Luyện lại ${remain.length} câu chưa đúng</button>` : ''}<button class="btn" data-act="p-exit">Về trang học sinh</button></div></div>`;
   }
-  return `<div class="wrap mid"><div class="row between" style="margin-top:22px"><div><strong>${P.set ? 'Bài luyện tập: ' + esc(P.set.title) : 'Luyện lại câu sai'}${S.h.preview ? ` của ${esc(S.h.name)} (giáo viên xem thử, không lưu)` : ''}</strong><span class="hint" id="p-count"></span></div><button class="btn small" data-act="p-exit">Kết thúc</button></div>
+  return `<div class="wrap mid"><div class="row between" style="margin-top:22px"><div><strong>${P.set ? 'Bài luyện tập: ' + esc(P.set.title) : 'Luyện lại câu sai'}${S.h.preview ? ` của ${esc(S.h.name)} (giáo viên xem thử, không lưu)` : ''}</strong><span class="hint" id="p-count"></span></div><div class="row nowrap">${P.set && P.set.endAt ? '<span class="p-timer" id="p-timer" role="timer">--:--</span>' : ''}<button class="btn small" data-act="p-exit">Kết thúc</button></div></div>
     <div class="lbar" aria-hidden="true"><i id="p-bar"></i></div>
     <section class="panel" id="pcard" style="margin-top:10px;scroll-margin-top:80px"></section></div>`;
+}
+function pTick(){
+  const P = S.p;
+  if (!P || P.finished || S.view !== 'practice' || !P.set || !P.set.endAt){ clearInterval(S.pTick); return; }
+  const left = (P.set.endAt - Date.now()) / 1000;
+  const t = $('#p-timer'); if (t){ t.textContent = fmtClock(left); t.classList.toggle('low', left <= 60); }
+  if (left <= 0){ clearInterval(S.pTick); P.timeUp = true; P.finished = true; render(); window.scrollTo(0, 0); toast('Hết giờ làm bài luyện tập.', 'err'); }
 }
 function fillP(){
   const P = S.p, w = P.list[P.idx], q = w.q;
@@ -1755,6 +1770,7 @@ function pCheck(){
   const P = S.p, w = P.list[P.idx], a = P.ans[w.id];
   if (!isFull(w.q, a)) return;
   if (P.set && P.set.closeAt && Date.now() > P.set.closeAt){ P.closed = true; P.finished = true; render(); window.scrollTo(0, 0); toast('Bài luyện tập đã đến giờ đóng.', 'err'); return; }
+  if (P.set && P.set.endAt && Date.now() > P.set.endAt){ P.timeUp = true; P.finished = true; render(); window.scrollTo(0, 0); toast('Hết giờ làm bài luyện tập.', 'err'); return; }
   let ok, nOk = null;
   if (w.q.type === 'mc') ok = a === w.k;
   else if (w.q.type === 'tf'){ nOk = 0; for (let i = 0; i < 4; i++) if (w.k && a[i] === w.k[i]) nOk++; ok = nOk === 4; }
@@ -1776,6 +1792,7 @@ function pMove(i){
 }
 
 /* ---------------- bài luyện tập được giao ---------------- */
+function setEnd(st, pr){ const d = +st.duration || 0; return d && pr && pr.startedAt ? pr.startedAt + d * 60000 : null; }
 const setState = (st, now = Date.now()) => st.openAt && now < st.openAt ? 'wait' : st.closeAt && now > st.closeAt ? 'closed' : 'open';
 function pickIds(st){
   const latest = new Map((S.h.items || []).map(it => [it.exam.code, it]));
@@ -1817,8 +1834,9 @@ function setsHTML(){
     const total = setCount(st), pr = H.prog[st.id];
     const ok = setDoneCount(st, total), started = !!pr || ok > 0;
     const wait = setState(st, now) === 'wait';
-    const when = wait ? `Mở lúc ${fmtDate(st.openAt)}` : `Đang mở${st.closeAt ? `, đóng lúc ${fmtDate(st.closeAt)}` : ''}`;
-    const btn = wait ? '<span class="hint">Chưa đến giờ</span>' : !total ? '<span class="hint">Không có câu nào</span>'
+    const end = setEnd(st, pr), over = end && Date.now() > end;
+    const when = wait ? `Mở lúc ${fmtDate(st.openAt)}` : `Đang mở${st.closeAt ? `, đóng lúc ${fmtDate(st.closeAt)}` : ''}${+st.duration ? `. Thời gian làm bài ${st.duration} phút${end ? (over ? ', đã hết giờ' : `, còn ${fmtClock((end - Date.now()) / 1000)}`) : ''}` : ''}`;
+    const btn = wait ? '<span class="hint">Chưa đến giờ</span>' : over ? '<span class="hint">Đã hết giờ làm bài</span>' : !total ? '<span class="hint">Không có câu nào</span>'
       : `<button class="btn primary small" data-act="ps-start" data-id="${esc(st.id)}">${started && ok >= total ? 'Làm lại từ đầu' : ok > 0 ? 'Làm tiếp' : 'Bắt đầu'}</button>`;
     return `<div class="mine-row"><div><div class="mine-t">${esc(st.title)}</div><span class="hint">${st.mode === 'pick' ? `${total} câu sai thầy cô chọn cho em làm lại` : `${(st.codes || []).length} đề, ${total} câu${st.mode === 'wrong' ? ' em cần luyện' : ''}`}. ${when}.</span>${started ? `<span class="hint">Đã làm đúng ${ok}/${total} câu.</span>` : ''}</div><div class="row end">${btn}</div></div>`;
   }).join('')}</div><p class="hint" style="margin-top:8px">Đến giờ mở mà chưa thấy nút Bắt đầu, bấm “Xem bài đã làm” lần nữa để tải lại.</p></div>`;
@@ -1861,10 +1879,15 @@ async function startSet(id){
   try { items = await setItems(st); } catch(e){ toast('Không tải được câu hỏi: ' + (e.message || e), 'err'); return; }
   if (!items.length){ toast('Bài luyện tập không có câu nào cho em.'); return; }
   const pr = S.h.prog[st.id] || (S.h.prog[st.id] = { setId: st.id, items: {}, round: 1 });
+  const dur = +st.duration || 0;
+  if (dur){
+    if (pr.startedAt && Date.now() > pr.startedAt + dur * 60000){ toast('Bài luyện tập này đã hết giờ làm bài.', 'err'); paintMine(); return; }
+    if (!pr.startedAt){ pr.startedAt = Date.now(); if (!S.h.preview) saveSetProg(st.id); }
+  }
   let list = items.filter(w => !isDone(st, w.id));
   if (!list.length){ list = items; Object.values(pr.items).forEach(v => { v.ok = false; }); pr.round = (+pr.round || 1) + 1; }
   pr.total = items.length;
-  startPractice(list, { id: st.id, title: st.title, closeAt: st.closeAt || null, total: items.length });
+  startPractice(list, { id: st.id, title: st.title, closeAt: st.closeAt || null, endAt: setEnd(st, pr), total: items.length });
 }
 const progQ = { saving: false, dirty: new Set() };
 async function saveSetProg(id){
@@ -1874,7 +1897,9 @@ async function saveSetProg(id){
   while (progQ.dirty.size){
     const sid = progQ.dirty.values().next().value; progQ.dirty.delete(sid);
     const pr = S.h.prog[sid]; if (!pr || !S.h.key) continue;
-    try { await S.be.set('presults', `${sid}_${S.h.key}`, { setId: sid, name: S.h.name, nameKey: S.h.key, total: pr.total || 0, round: pr.round || 1, items: pr.items, updatedAt: Date.now() }); }
+    const doc = { setId: sid, name: S.h.name, nameKey: S.h.key, total: pr.total || 0, round: pr.round || 1, items: pr.items, updatedAt: Date.now() };
+    if (pr.startedAt) doc.startedAt = pr.startedAt;
+    try { await S.be.set('presults', `${sid}_${S.h.key}`, doc); }
     catch(e){ toast('Chưa lưu được tiến độ bài luyện tập.', 'err'); }
   }
   progQ.saving = false;
@@ -1896,6 +1921,7 @@ function psetTab(){
       <label class="field">Tên bài luyện tập<input class="input" id="ps-title" placeholder="VD: Ôn tập tuần 3"></label>
       <label class="field">Mở lúc (để trống nếu mở ngay)<input class="input" type="datetime-local" id="ps-open"></label>
       <label class="field">Đóng lúc (tuỳ chọn)<input class="input" type="datetime-local" id="ps-close"></label>
+      <label class="field">Thời gian làm bài (phút)<input class="input" type="number" min="0" max="600" id="ps-dur" value="0"><span class="hint">0 là không giới hạn. Đồng hồ chạy từ lúc em bấm Bắt đầu.</span></label>
     </div>
     <fieldset class="pick"><legend>Chọn đề: <span id="ps-count">0</span> đề</legend><div class="pick-grid">${S.exams.map(e => `<label class="check"><input type="checkbox" name="ps-code" value="${esc(e.code)}"><span>${esc(e.title)} <span class="hint" style="display:inline">(${esc(e.code)}, ${e.questions.length} câu)</span></span></label>`).join('')}</div></fieldset>
     <fieldset class="pick"><legend>Nội dung</legend><div class="checks" style="margin:4px 0 0">
@@ -1905,8 +1931,8 @@ function psetTab(){
     : `<div class="empty">Chưa có đề nào. Tạo đề trước rồi quay lại đây.</div>`}
   </section>
   <section class="block"><h2>Bài luyện tập đã giao</h2>
-    ${S.psets === undefined ? '<p class="hint" role="status">Đang tải…</p>' : sets.length ? `<div class="table-wrap"><table><thead><tr><th>Tên bài</th><th></th><th>Trạng thái</th><th>Các đề</th><th>Nội dung</th><th>Mở lúc</th><th>Đóng lúc</th></tr></thead><tbody>
-    ${sets.map(st => `<tr><td><strong>${esc(st.title)}</strong></td><td><div class="row nowrap"><button class="btn small" data-act="ps-prog" data-id="${esc(st.id)}">Tình hình</button><button class="btn small" data-act="ps-edit" data-id="${esc(st.id)}">Sửa giờ</button><button class="btn small danger" data-act="ps-del" data-id="${esc(st.id)}">Xoá</button></div></td><td>${stTxt(st)}</td><td style="white-space:normal;min-width:200px">${(st.codes || []).map(c => esc(title(c))).join(', ')}</td><td style="white-space:normal;min-width:150px">${st.mode === 'pick' ? `${(st.items || []).length} câu chọn từ kho câu sai${st.studentNames && st.studentNames.length ? ', giao cho ' + esc(st.studentNames.join(', ')) : ''}` : st.mode === 'all' ? 'Tất cả câu' : 'Câu làm sai'}</td><td>${st.openAt ? fmtDate(st.openAt) : 'Mở ngay'}</td><td>${st.closeAt ? fmtDate(st.closeAt) : '–'}</td></tr>`).join('')}
+    ${S.psets === undefined ? '<p class="hint" role="status">Đang tải…</p>' : sets.length ? `<div class="table-wrap"><table><thead><tr><th>Tên bài</th><th></th><th>Trạng thái</th><th>Các đề</th><th>Nội dung</th><th>Thời gian làm</th><th>Mở lúc</th><th>Đóng lúc</th></tr></thead><tbody>
+    ${sets.map(st => `<tr><td><strong>${esc(st.title)}</strong></td><td><div class="row nowrap"><button class="btn small" data-act="ps-prog" data-id="${esc(st.id)}">Tình hình</button><button class="btn small" data-act="ps-edit" data-id="${esc(st.id)}">Sửa giờ, thời gian</button><button class="btn small danger" data-act="ps-del" data-id="${esc(st.id)}">Xoá</button></div></td><td>${stTxt(st)}</td><td style="white-space:normal;min-width:200px">${(st.codes || []).map(c => esc(title(c))).join(', ')}</td><td style="white-space:normal;min-width:150px">${st.mode === 'pick' ? `${(st.items || []).length} câu chọn từ kho câu sai${st.studentNames && st.studentNames.length ? ', giao cho ' + esc(st.studentNames.join(', ')) : ''}` : st.mode === 'all' ? 'Tất cả câu' : 'Câu làm sai'}</td><td>${+st.duration ? st.duration + ' phút' : 'Không giới hạn'}</td><td>${st.openAt ? fmtDate(st.openAt) : 'Mở ngay'}</td><td>${st.closeAt ? fmtDate(st.closeAt) : '–'}</td></tr>`).join('')}
     </tbody></table></div>` : '<div class="empty">Chưa giao bài luyện tập nào.</div>'}
   </section>`;
 }
@@ -1915,6 +1941,8 @@ async function createPset(){
   const created = c => { const e = S.exams.find(x => x.code === c); return e ? e.createdAt : 0; };
   const codes = $$('input[name="ps-code"]:checked').map(x => x.value).sort((x, y) => created(x) - created(y));
   const title = $('#ps-title').value.trim(), openV = $('#ps-open').value, closeV = $('#ps-close').value;
+  const durV = ($('#ps-dur') || {}).value;
+  if (durV === '' || isNaN(+durV) || +durV < 0 || +durV > 600){ msg.innerHTML = errSpan('Thời gian làm bài từ 0 đến 600 phút.'); return; }
   const mode = ($('input[name="ps-mode"]:checked') || {}).value || 'wrong';
   if (!codes.length){ msg.innerHTML = errSpan('Chọn ít nhất một đề.'); return; }
   const openAt = openV ? new Date(openV).getTime() : null, closeAt = closeV ? new Date(closeV).getTime() : null;
@@ -1923,7 +1951,7 @@ async function createPset(){
   const id = 'P' + rid(9);
   btn.disabled = true; msg.textContent = 'Đang lưu…';
   try {
-    await S.be.set('psets', id, { id, title: title || `Luyện tập ${fmtDate(Date.now())}`, codes, counts, mode, openAt, closeAt, createdAt: Date.now(), teacher: LS.get('tt_teacher') || '' });
+    await S.be.set('psets', id, { id, title: title || `Luyện tập ${fmtDate(Date.now())}`, codes, counts, mode, openAt, closeAt, duration: Math.round(+durV), createdAt: Date.now(), teacher: LS.get('tt_teacher') || '' });
     toast(openAt && openAt > Date.now() ? `Đã giao bài, mở lúc ${fmtDate(openAt)}.` : 'Đã giao bài luyện tập, học sinh làm được ngay.');
     await loadPsets();
   } catch(e){ msg.innerHTML = errSpan('Không lưu được: ' + (e.message || e)); btn.disabled = false; }
@@ -1933,15 +1961,17 @@ async function editPset(id){
   const html = `<div class="es-grid">
     <label class="field full">Tên bài luyện tập<input class="input" id="pe-title" value="${esc(st.title)}"></label>
     <label class="field">Mở lúc (để trống nếu mở ngay)<input class="input" type="datetime-local" id="pe-open" value="${toLocalInput(st.openAt)}"></label>
-    <label class="field">Đóng lúc (để trống nếu không đóng)<input class="input" type="datetime-local" id="pe-close" value="${toLocalInput(st.closeAt)}"></label></div>
-    <p class="hint" style="margin-top:12px">Tiến độ học sinh đã làm được giữ nguyên khi đổi giờ.</p>`;
+    <label class="field">Đóng lúc (để trống nếu không đóng)<input class="input" type="datetime-local" id="pe-close" value="${toLocalInput(st.closeAt)}"></label>
+    <label class="field">Thời gian làm bài (phút)<input class="input" type="number" min="0" max="600" id="pe-dur" value="${+st.duration || 0}"><span class="hint">0 là không giới hạn</span></label></div>
+    <p class="hint" style="margin-top:12px">Tiến độ học sinh đã làm được giữ nguyên khi đổi giờ. Thời gian làm bài mới tính lại từ lúc mỗi em bấm Bắt đầu; muốn cho một em làm lại từ đầu về thời gian, dùng nút “Đặt lại giờ” trong mục Tình hình.</p>`;
   const ok = await modal({ title: 'Sửa bài luyện tập', html, wide: true, ok: 'Lưu',
     validate: async () => {
-      const title = $('#pe-title').value.trim(), openV = $('#pe-open').value, closeV = $('#pe-close').value;
+      const title = $('#pe-title').value.trim(), openV = $('#pe-open').value, closeV = $('#pe-close').value, durV = $('#pe-dur').value;
       if (!title) return 'Nhập tên bài luyện tập.';
+      if (durV === '' || isNaN(+durV) || +durV < 0 || +durV > 600) return 'Thời gian làm bài từ 0 đến 600 phút.';
       const openAt = openV ? new Date(openV).getTime() : null, closeAt = closeV ? new Date(closeV).getTime() : null;
       if (openAt && closeAt && closeAt <= openAt) return 'Giờ đóng phải sau giờ mở.';
-      try { const cur = await S.be.get('psets', id); if (!cur) return 'Không tìm thấy bài, có thể đã bị xoá.'; await S.be.set('psets', id, { ...cur, title, openAt, closeAt }); }
+      try { const cur = await S.be.get('psets', id); if (!cur) return 'Không tìm thấy bài, có thể đã bị xoá.'; await S.be.set('psets', id, { ...cur, title, openAt, closeAt, duration: Math.round(+durV) }); }
       catch(e){ return 'Không lưu được: ' + (e.message || e); }
       return '';
     } });
@@ -1963,9 +1993,20 @@ async function psetProgress(id){
   let rows;
   try { rows = await S.be.list('presults', 'setId', id); } catch(e){ toast('Không tải được: ' + (e.message || e), 'err'); return; }
   rows.sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi'));
-  const html = rows.length ? `<p class="hint" style="margin-bottom:10px">Chỉ hiện học sinh đã bắt đầu làm. “Số lần trả lời” đếm cả những lần làm lại câu sai.</p><div class="table-wrap"><table><thead><tr><th>Họ tên</th><th class="num">Đã làm đúng</th><th class="num">Số lần trả lời</th><th class="num">Lượt làm</th><th>Lần cuối</th></tr></thead><tbody>${rows.map(r => { const v = Object.values(r.items || {}); const ok = v.filter(x => x.ok).length; return `<tr><td>${esc(r.name)}</td><td class="num"><strong>${ok}/${r.total || '?'}</strong></td><td class="num">${v.reduce((a, x) => a + (x.tries || 0), 0)}</td><td class="num">${r.round || 1}</td><td>${fmtDate(r.updatedAt)}</td></tr>`; }).join('')}</tbody></table></div>`
+  const html = rows.length ? `<p class="hint" style="margin-bottom:10px">Chỉ hiện học sinh đã bắt đầu làm. “Số lần trả lời” đếm cả những lần làm lại câu sai.</p><div class="table-wrap"><table><thead><tr><th>Họ tên</th><th class="num">Đã làm đúng</th><th class="num">Số lần trả lời</th><th class="num">Lượt làm</th><th>Thời gian làm</th><th>Lần cuối</th></tr></thead><tbody>${rows.map(r => { const v = Object.values(r.items || {}); const ok = v.filter(x => x.ok).length; const dur = +st.duration || 0; const left = dur && r.startedAt ? (r.startedAt + dur * 60000 - Date.now()) / 1000 : null; return `<tr><td>${esc(r.name)}</td><td class="num"><strong>${ok}/${r.total || '?'}</strong></td><td class="num">${v.reduce((a, x) => a + (x.tries || 0), 0)}</td><td class="num">${r.round || 1}</td><td>${!dur ? 'Không giới hạn' : !r.startedAt ? 'Chưa bắt đầu' : left > 0 ? `Còn ${fmtClock(left)}` : 'Hết giờ'}${dur && r.startedAt ? ` <button class="btn small" data-act="ps-reset-time" data-set="${esc(st.id)}" data-id="${esc(r.id)}">Đặt lại giờ</button>` : ''}</td><td>${fmtDate(r.updatedAt)}</td></tr>`; }).join('')}</tbody></table></div>`
     : `<div class="empty">Chưa có học sinh nào bắt đầu bài này.</div>`;
   await modal({ title: `Tình hình: ${st.title}`, html, wide: true, ok: 'Đóng', cancel: '' });
+}
+async function resetSetTime(setId, rowId){
+  const st = (S.psets || []).find(x => x.id === setId);
+  try {
+    const cur = await S.be.get('presults', rowId); if (!cur) return toast('Không tìm thấy bài của em này.', 'err');
+    if (!await modal({ title: 'Đặt lại giờ?', body: `${cur.name} sẽ được làm bài “${st ? st.title : ''}” lại từ đầu về thời gian, tính đủ ${+st.duration || 0} phút kể từ lần bấm Bắt đầu tiếp theo. Các câu đã làm đúng vẫn giữ nguyên.`, ok: 'Đặt lại giờ' })) return;
+    const next = { ...cur }; delete next.startedAt;
+    await S.be.set('presults', rowId, next);
+    toast('Đã đặt lại giờ cho ' + cur.name + '.');
+    closeModals(); psetProgress(setId);
+  } catch(e){ toast('Không đặt lại được: ' + (e.message || e), 'err'); }
 }
 
 /* ---------------- kho câu sai (giáo viên) ---------------- */
@@ -2042,6 +2083,7 @@ function bankTab(){
       <label class="field" style="flex:2 1 220px">Tên bài làm lại<input class="input" id="bk-title" value="${esc(B.title)}" placeholder="VD: Làm lại câu sai tuần 3"></label>
       <label class="field">Mở lúc (tuỳ chọn)<input class="input" type="datetime-local" id="bk-open" value="${esc(B.open)}"></label>
       <label class="field">Đóng lúc (tuỳ chọn)<input class="input" type="datetime-local" id="bk-close" value="${esc(B.close)}"></label>
+      <label class="field" style="min-width:140px">Thời gian làm (phút)<input class="input" type="number" min="0" max="600" id="bk-dur" value="${esc(B.dur || 0)}"><span class="hint">0 là không giới hạn</span></label>
       <div class="row"><button class="btn primary" data-act="bank-assign" ${B.sel.size ? '' : 'disabled'}>Giao làm lại</button><button class="btn ghost" data-act="bank-clear" ${B.sel.size ? '' : 'disabled'}>Bỏ chọn</button></div>
       <p class="hint" style="flex-basis:100%;margin:0">${who}</p>
     </div>` : ''}
@@ -2059,7 +2101,7 @@ function bankRow(it){
     <input type="checkbox" data-bank="${esc(it.id)}" ${on ? 'checked' : ''} aria-label="Chọn ${esc(it.E.title)}, câu ${q.n}">
     ${q.q.length ? `<img class="bank-thumb" data-ref="${esc(q.q[0])}" alt="Ảnh câu ${q.n}">` : '<span class="hint">Không có ảnh</span>'}
     <div><div><strong>${esc(it.E.title)}, câu ${q.n}</strong> <span class="hint" style="display:inline">Đáp án: ${esc(it.k != null ? it.k : '?')}</span></div><div class="bank-chips">${chips}${tags}</div></div>
-    <button class="btn small" data-act="bank-view" data-id="${esc(it.id)}">Xem câu</button>
+    <div class="row nowrap"><button class="btn small" data-act="bank-view" data-id="${esc(it.id)}">Xem câu</button><button class="btn small" data-act="bank-replace" data-id="${esc(it.id)}">Thay câu</button></div>
   </div>`;
 }
 function bankSyncBar(){
@@ -2096,18 +2138,92 @@ async function bankAssign(){
   const targets = students ? B.students.filter(x => x.nk === B.st) : B.students;
   const per = targets.map(x => ({ name: x.name, n: chosen.filter(it => it.wrong.some(w => w.nk === x.nk && !w.fixed)).length })).filter(x => x.n);
   if (!per.length){ toast('Các câu đã chọn không còn em nào cần làm lại.', 'err'); return; }
+  const durV = ($('#bk-dur') || {}).value;
+  if (durV === '' || isNaN(+durV) || +durV < 0 || +durV > 600){ toast('Thời gian làm bài từ 0 đến 600 phút.', 'err'); return; }
   const title = (($('#bk-title') || {}).value || '').trim() || `Làm lại câu sai ${fmtDate(Date.now())}`;
-  const body = `Giao “${title}” gồm ${chosen.length} câu. ${per.map(x => `${x.name}: ${x.n} câu`).join(', ')}.${openAt ? ` Mở lúc ${fmtDate(openAt)}.` : ' Mở ngay.'}${closeAt ? ` Đóng lúc ${fmtDate(closeAt)}.` : ''}`;
+  const body = `Giao “${title}” gồm ${chosen.length} câu. ${per.map(x => `${x.name}: ${x.n} câu`).join(', ')}.${openAt ? ` Mở lúc ${fmtDate(openAt)}.` : ' Mở ngay.'}${closeAt ? ` Đóng lúc ${fmtDate(closeAt)}.` : ''}${+durV ? ` Thời gian làm bài ${Math.round(+durV)} phút.` : ''}`;
   if (!await modal({ title: 'Giao làm lại các câu đã chọn?', body, ok: 'Giao làm lại' })) return;
   const id = 'P' + rid(9);
   const ids = chosen.map(it => it.id);
   try {
-    await S.be.set('psets', id, { id, title, mode: 'pick', items: ids, codes: [...new Set(ids.map(x => x.split('_')[0]))], counts: {}, students, studentNames: students ? targets.map(x => x.name) : null, openAt, closeAt, createdAt: Date.now(), teacher: LS.get('tt_teacher') || '' });
-    B.sel = new Set(); B.title = ''; B.open = ''; B.close = '';
+    await S.be.set('psets', id, { id, title, mode: 'pick', items: ids, codes: [...new Set(ids.map(x => x.split('_')[0]))], counts: {}, students, studentNames: students ? targets.map(x => x.name) : null, openAt, closeAt, duration: Math.round(+durV), createdAt: Date.now(), teacher: LS.get('tt_teacher') || '' });
+    B.sel = new Set(); B.title = ''; B.open = ''; B.close = ''; B.dur = 0;
     toast(openAt && openAt > Date.now() ? `Đã giao, mở lúc ${fmtDate(openAt)}.` : 'Đã giao, học sinh làm được ngay.');
     S.psets = undefined;
     loadBank();
   } catch(e){ toast('Không giao được: ' + (e.message || e), 'err'); }
+}
+
+/* ---------------- thay câu hỏi bị lỗi ---------------- */
+async function replaceQuestion(id){
+  const it = (S.bank.items || []).find(x => x.id === id); if (!it) return;
+  const E0 = it.E, q0 = it.q, n = q0.n;
+  const html = `<p class="hint">Thay nội dung câu này trong đề gốc “${esc(E0.title)}”. Ảnh và đáp án mới áp dụng cho cả đề thi lẫn kho câu sai.</p>
+    <div class="rq-old">${q0.q.map(r => `<img data-ref="${esc(r)}" alt="Câu ${n} hiện tại">`).join('') || '<span class="hint">Câu hiện tại không có ảnh.</span>'}</div>
+    <div class="es-grid">
+      <label class="field full">Ảnh câu hỏi mới (để trống nếu giữ ảnh cũ)<input class="input" type="file" id="rq-img" accept="image/*" multiple></label>
+      <label class="field full">Ảnh lời giải mới (để trống nếu giữ lời giải cũ)<input class="input" type="file" id="rq-sol" accept="image/*" multiple></label>
+      <label class="field">Loại câu<select class="input" id="rq-type">${Object.entries(TYPE_LABEL).map(([k, l]) => `<option value="${k}" ${q0.type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="field">Đáp án<input class="input" id="rq-ans" value="${esc(it.k != null ? it.k : '')}" autocomplete="off"></label>
+    </div>
+    <div class="checks" style="margin:12px 0 4px">
+      <label class="check"><input type="checkbox" id="rq-regrade" checked><span>Chấm lại các bài đã nộp của đề này theo đáp án mới</span></label>
+      <label class="check"><input type="checkbox" id="rq-reset" checked><span>Bắt học sinh luyện lại câu này từ đầu (xoá dấu “đã làm lại đúng” của câu)</span></label>
+    </div>
+    <div id="rq-msg" class="hint" role="status"></div>`;
+  const pr = modal({ title: `Thay câu ${n} của đề ${E0.code}`, html, wide: true, ok: 'Lưu câu mới',
+    validate: async () => {
+      const type = $('#rq-type').value, raw = $('#rq-ans').value.trim();
+      const err = answerError({ type, answer: raw }, true); if (err) return err;
+      const qFiles = [...$('#rq-img').files], sFiles = [...$('#rq-sol').files];
+      const msg = $('#rq-msg');
+      if ((qFiles.length || sFiles.length) && !S.be.canUpload) return 'Tài khoản đang mở trang không có quyền tải ảnh lên.';
+      try {
+        const E = await S.be.get('exams', E0.code); if (!E) return 'Không tìm thấy đề, có thể đã bị xoá.';
+        const key = (await S.be.get('keys', E0.code)) || { code: E0.code, answers: {}, sol: {} };
+        const qi = E.questions.findIndex(x => x.n === n); if (qi < 0) return 'Không tìm thấy câu này trong đề.';
+        const sortF = arr => arr.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+        const up = async (files, what) => { const refs = []; let i = 0; for (const f of sortF(files)){ i++; msg.textContent = `Đang tải ${what} ${i}/${files.length}…`; refs.push(await S.be.putImage(await fitImage(f, S.be.imgLimit))); } return refs; };
+        const newQ = qFiles.length ? await up(qFiles, 'ảnh câu hỏi') : null;
+        const newS = sFiles.length ? await up(sFiles, 'ảnh lời giải') : null;
+        const oldQ = E.questions[qi].q || [], oldS = (key.sol && key.sol[n]) || [];
+        msg.textContent = 'Đang lưu đề…';
+        E.questions[qi] = { n, type, q: newQ || oldQ };
+        key.answers = { ...key.answers, [n]: canon({ type, answer: raw }) };
+        key.sol = { ...(key.sol || {}) }; if (newS) key.sol[n] = newS;
+        await S.be.set('keys', E0.code, key);
+        await S.be.set('exams', E0.code, E);
+        replaceExam(E);
+        if (newQ) for (const r of oldQ) await S.be.delImage(r);
+        if (newS) for (const r of oldS) await S.be.delImage(r);
+        if ($('#rq-regrade').checked){
+          msg.textContent = 'Đang chấm lại các bài đã nộp…';
+          const subs = (await S.be.list('subs', 'code', E0.code)).filter(x => x.status === 'done');
+          for (const sub of subs){
+            const g = grade(E, key, sub.answers || {});
+            const body = { ...sub }; delete body.id;
+            await S.be.set('subs', sub.id, { ...body, score: g.score, max: g.max, correct: g.correct, perQ: g.perQ });
+          }
+        }
+        if ($('#rq-reset').checked){
+          msg.textContent = 'Đang xoá tiến độ luyện tập của câu này…';
+          for (const doc of await S.be.list('practice')){
+            if (doc.mastered && doc.mastered[id] != null){ const m = { ...doc.mastered }; delete m[id]; const body = { ...doc }; delete body.id; await S.be.set('practice', doc.id, { ...body, mastered: m }); }
+          }
+          for (const doc of await S.be.list('presults')){
+            if (doc.items && doc.items[id] != null){ const its = { ...doc.items }; delete its[id]; const body = { ...doc }; delete body.id; await S.be.set('presults', doc.id, { ...body, items: its }); }
+          }
+        }
+      } catch(e){ return 'Không lưu được: ' + (e.message || e); }
+      return '';
+    } });
+  hydrate($('#modal-root'));
+  const ok = await pr;
+  if (!ok) return;
+  IMG_CACHE.clear();
+  toast(`Đã thay câu ${n} của đề ${E0.code}.`);
+  loadBank();
+  if (S.res && S.res.code === E0.code) loadResults(E0.code);
 }
 
 /* ---------------- sự kiện ---------------- */
@@ -2170,13 +2286,15 @@ document.addEventListener('click', async e => {
     case 'fs-enter': enterFS(); break;
     case 'vlog': showVlog(el.dataset.id); break;
     case 'bank-view': bankView(el.dataset.id); break;
+    case 'bank-replace': replaceQuestion(el.dataset.id); break;
+    case 'ps-reset-time': resetSetTime(el.dataset.set, el.dataset.id); break;
     case 'bank-assign': bankAssign(); break;
     case 'bank-clear': S.bank.sel = new Set(); $$('[data-bank]').forEach(b => { b.checked = false; b.closest('.bank-row').classList.remove('sel'); }); bankSyncBar(); break;
     case 'ps-create': createPset(); break;
     case 'ps-prog': psetProgress(el.dataset.id); break;
     case 'ps-edit': editPset(el.dataset.id); break;
     case 'ps-del': delPset(el.dataset.id); break;
-    case 'p-exit': S.p = null; go(S.h.preview ? 'teacher' : 'student'); break;
+    case 'p-exit': clearInterval(S.pTick); S.p = null; go(S.h.preview ? 'teacher' : 'student'); break;
     case 'exit': if (S.done && (S.done.preview || S.done.teacher || S.done.asStudent)){ S.done = null; go('teacher'); break; }
       S.done = null; if (S.st.exam){ try { S.st.exam = await S.be.get('exams', S.st.exam.code) || S.st.exam; } catch(err){} } go('student'); break;
   }
@@ -2202,6 +2320,7 @@ document.addEventListener('change', e => {
   if (t.dataset.bankAll){ bankVisible().filter(it => it.q.type === t.dataset.bankAll).forEach(it => bankToggle(it.id, t.checked)); bankSyncBar(); return; }
   if (t.id === 'bk-st' || t.id === 'bk-code'){ S.bank[t.id === 'bk-st' ? 'st' : 'code'] = t.value; S.bank.sel = new Set(); paintBank(); return; }
   if (t.id === 'bk-open' || t.id === 'bk-close'){ S.bank[t.id === 'bk-open' ? 'open' : 'close'] = t.value; return; }
+  if (t.id === 'bk-dur'){ S.bank.dur = t.value; return; }
   if (t.name === 'ps-code'){ const c = $('#ps-count'); if (c) c.textContent = $$('input[name="ps-code"]:checked').length; return; }
   if (t.id === 'p-only'){ S.h.onlyNew = t.checked; S.h.pick = 'all'; paintMine(); return; }
   if (t.id === 'p-pick'){ S.h.pick = t.value; return; }
