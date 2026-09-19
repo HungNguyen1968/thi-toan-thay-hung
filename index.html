@@ -326,6 +326,15 @@ body.in-exam .qimg{-webkit-user-drag:none;pointer-events:auto}
 .rq-old{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0 14px}
 .rq-old img{max-height:90px;border:1px solid var(--line);border-radius:4px;background:#fff}
 
+.qb-head{display:flex;gap:12px 18px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px}
+.qb-targets{display:flex;gap:10px;flex-wrap:wrap}
+.qb-targets .field{width:112px}
+.qb-count{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.qb-list{max-height:520px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:0 12px 12px}
+.qb-list h4{position:sticky;top:0;background:var(--surface);margin:0;padding:12px 0 8px;border-bottom:2px solid var(--ink);z-index:1;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.bank-row.used{opacity:.55}
+.src-tag{font-size:12px;color:var(--muted)}
+
 /* modal & toast */
 .modal-bg{position:fixed;inset:0;z-index:60;background:color-mix(in srgb,#0A0F1A 55%,transparent);display:grid;place-items:center;padding:16px}
 .modal{width:min(460px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--surface);border:2px solid var(--ink);border-radius:12px;padding:22px}
@@ -903,7 +912,13 @@ function createTab(){
     <div class="row" style="margin-top:16px"><button class="btn primary" data-act="import">Tạo câu hỏi từ file</button><span id="import-msg" class="hint" role="status"></span></div>
   </section>
   <section class="block">
-    <div class="row between"><h2 style="margin:0">Danh sách câu hỏi<span class="count-badge" id="q-count">${d.questions.length}</span></h2><button class="btn" data-act="q-add">+ Thêm thủ công</button></div>
+    <div class="row between"><h2 style="margin:0">Lấy câu từ các đề đã thi</h2><div class="row"><button class="btn primary" data-act="qb-auto">Ghép đề ngẫu nhiên 12 + 4 + 6</button><button class="btn" data-act="qb-shuffle">Trộn lại nhiều đề</button><button class="btn" data-act="qb-open">${S.qb && S.qb.open ? 'Đóng kho câu hỏi' : 'Mở kho câu hỏi cũ'}</button></div></div>
+    <p class="hint" style="margin-top:8px">Chọn lại các câu đã dùng trong những đề trước để ghép thành đề mới: 12 câu trắc nghiệm, 4 câu đúng/sai, 6 câu trả lời ngắn. Ảnh và đáp án được chép sang đề mới, đề cũ giữ nguyên.</p>
+    <div id="qbank">${qbHTML()}</div>
+  </section>
+  <section class="block">
+    <div class="row between"><h2 style="margin:0">Danh sách câu hỏi<span class="count-badge" id="q-count">${d.questions.length}</span></h2><div class="row"><button class="btn" data-act="q-xls">Tải Excel đáp án</button><button class="btn" data-act="q-add">+ Thêm thủ công</button></div></div>
+    <p class="hint" id="q-mix" style="margin-top:6px">${qMix()}</p>
     <div id="qlist" style="margin-top:14px">${qlistHTML()}</div>
     <div class="row publish-row"><button class="btn primary big" data-act="publish">Tạo đề</button><span id="publish-msg" class="hint" role="status"></span></div>
   </section>`;
@@ -924,8 +939,13 @@ function qlistHTML(){
     <button class="btn small danger" data-act="q-del" data-i="${i}" aria-label="Xoá câu ${q.n}">Xoá</button>
   </div>`).join('');
 }
-function refreshQList(){ const el = $('#qlist'); if (el) el.innerHTML = qlistHTML(); const c = $('#q-count'); if (c) c.textContent = S.draft.questions.length; }
-function revokeQ(q){ [...q.qImgs, ...q.sImgs].forEach(x => URL.revokeObjectURL(x.url)); }
+function refreshQList(){ const el = $('#qlist'); if (el) el.innerHTML = qlistHTML(); const c = $('#q-count'); if (c) c.textContent = S.draft.questions.length; const m = $('#q-mix'); if (m) m.textContent = qMix(); }
+function qMix(){
+  const c = { mc: 0, tf: 0, sa: 0 }; S.draft.questions.forEach(q => { c[q.type] = (c[q.type] || 0) + 1; });
+  const std = c.mc === 12 && c.tf === 4 && c.sa === 6;
+  return `Đang có ${S.draft.questions.length} câu: ${c.mc} trắc nghiệm, ${c.tf} đúng/sai, ${c.sa} trả lời ngắn. ${std ? 'Đúng cấu trúc 12 + 4 + 6.' : 'Cấu trúc thường dùng là 12 + 4 + 6.'}`;
+}
+function revokeQ(q){ [...q.qImgs, ...q.sImgs].forEach(x => { if (!x.ref) URL.revokeObjectURL(x.url); }); }
 function addQ(){ const qs = S.draft.questions; const n = qs.reduce((m, q) => Math.max(m, q.n), 0) + 1; qs.push({ n, type: 'mc', answer: '', manual: false, qImgs: [], sImgs: [] }); refreshQList(); }
 async function delQ(i){ const q = S.draft.questions[i]; if (!q) return; if (!await modal({ title: `Xoá câu ${q.n}?`, body: 'Câu này sẽ bị bỏ khỏi đề đang soạn.', ok: 'Xoá câu', kind: 'danger' })) return; revokeQ(q); S.draft.questions.splice(i, 1); refreshQList(); }
 
@@ -994,10 +1014,10 @@ async function publish(){
     let code = '';
     for (let t = 0; t < 6; t++){ code = rid(6); if (!await be.get('exams', code)) break; }
     const total = d.questions.reduce((s, q) => s + q.qImgs.length + q.sImgs.length, 0); let done = 0;
-    const up = async list => { const refs = []; for (const x of list){ msg.textContent = `Đang tải ảnh ${done + 1}/${total}…`; refs.push(await be.putImage(await fitImage(x.blob, be.imgLimit))); done++; } return refs; };
+    const up = async list => { const refs = []; for (const x of list){ msg.textContent = `Đang tải ảnh ${done + 1}/${total}…`; refs.push(x.ref ? x.ref : await be.putImage(await fitImage(x.blob, be.imgLimit))); done++; } return refs; };
     const questions = [], answers = {}, sol = {};
     for (const q of d.questions){
-      questions.push({ n: q.n, type: q.type, q: await up(q.qImgs) });
+      questions.push({ n: q.n, type: q.type, q: await up(q.qImgs), ...(q.src ? { src: q.src } : {}) });
       answers[q.n] = canon(q);
       const s = await up(q.sImgs); if (s.length) sol[q.n] = s;
     }
@@ -1192,21 +1212,50 @@ async function exportExcel(){
   try { await S.be.save(`Ket_qua_${E.code}.xlsx`, blob); }
   catch(e){ if (e && e.code === 'declined') return; toast('Không tải được file: ' + ((e && (e.message || e.code)) || e), 'err'); }
 }
+async function refsInUse(exceptCodes){
+  const skip = new Set(exceptCodes);
+  const used = new Set();
+  const [exams, keys] = await Promise.all([S.be.list('exams'), S.be.list('keys')]);
+  exams.forEach(E => { if (skip.has(E.code)) return; (E.questions || []).forEach(q => (q.q || []).forEach(r => used.add(r))); });
+  keys.forEach(K => { const c = K.code || K.id; if (skip.has(c)) return; Object.values(K.sol || {}).forEach(list => (list || []).forEach(r => used.add(r))); });
+  return used;
+}
+async function safeDelImages(refs, code){
+  if (!refs.length) return;
+  let used;
+  try { used = await refsInUse([code]); } catch(e){ return; }
+  try {
+    const [E, K] = await Promise.all([S.be.get('exams', code), S.be.get('keys', code)]);
+    if (E) (E.questions || []).forEach(q => (q.q || []).forEach(r => used.add(r)));
+    if (K) Object.values(K.sol || {}).forEach(list => (list || []).forEach(r => used.add(r)));
+  } catch(e){ return; }
+  for (const r of refs) if (!used.has(r)) await S.be.delImage(r);
+}
+async function purgeExams(codes, onStep){
+  const used = await refsInUse(codes);
+  for (const code of codes){
+    if (onStep) onStep(code);
+    const [E, key, subs] = await Promise.all([S.be.get('exams', code), S.be.get('keys', code), S.be.list('subs', 'code', code)]);
+    for (const x of subs) await S.be.del('subs', x.id);
+    const refs = new Set();
+    if (E) (E.questions || []).forEach(q => (q.q || []).forEach(r => refs.add(r)));
+    if (key) Object.values(key.sol || {}).forEach(list => (list || []).forEach(r => refs.add(r)));
+    for (const r of refs) if (!used.has(r)) await S.be.delImage(r);
+    await S.be.del('keys', code);
+    await S.be.del('exams', code);
+    if (S.res.code === code) S.res = { code: '' };
+    if (S.live.watching === code){ stopLive(); S.live.code = ''; }
+  }
+}
 async function deleteExam(code){
   let E = S.exams.find(e => e.code === code) || (S.res.exam && S.res.exam.code === code ? S.res.exam : null);
   let subs = [];
   try { if (!E) E = await S.be.get('exams', code); subs = await S.be.list('subs', 'code', code); } catch(e){}
   if (!E){ toast('Không tìm thấy đề ' + code + '.', 'err'); return; }
-  if (!await modal({ title: 'Xoá đề?', body: `Xoá đề “${E.title}” (mã ${code}), toàn bộ ảnh và ${subs.length} bài nộp. Không khôi phục được. Nên bấm “Sao lưu tất cả kết quả” ở mục Kết quả trước khi xoá.`, ok: 'Xoá đề', kind: 'danger' })) return;
+  if (!await modal({ title: 'Xoá đề?', body: `Xoá đề “${E.title}” (mã ${code}) và ${subs.length} bài nộp. Ảnh dùng chung với đề khác vẫn được giữ. Không khôi phục được. Nên bấm “Sao lưu tất cả kết quả” ở mục Kết quả trước khi xoá.`, ok: 'Xoá đề', kind: 'danger' })) return;
   toast('Đang xoá đề…');
   try {
-    for (const x of subs) await S.be.del('subs', x.id);
-    const key = await S.be.get('keys', code);
-    if (key && key.sol) for (const refs of Object.values(key.sol)) for (const r of refs) await S.be.delImage(r);
-    for (const q of E.questions) for (const r of q.q) await S.be.delImage(r);
-    await S.be.del('keys', code); await S.be.del('exams', code);
-    if (S.res.code === code) S.res = { code: '' };
-    if (S.live.watching === code){ stopLive(); S.live.code = ''; }
+    await purgeExams([code]);
     toast('Đã xoá đề ' + code + '.');
     await loadExams();
   } catch(e){ toast('Xoá chưa xong: ' + (e.message || e), 'err'); }
@@ -2247,8 +2296,7 @@ async function replaceQuestion(id){
         await S.be.set('keys', E0.code, key);
         await S.be.set('exams', E0.code, E);
         replaceExam(E);
-        if (newQ) for (const r of oldQ) await S.be.delImage(r);
-        if (newS) for (const r of oldS) await S.be.delImage(r);
+        await safeDelImages([...(newQ ? oldQ : []), ...(newS ? oldS : [])], E0.code);
         if ($('#rq-regrade').checked){
           msg.textContent = 'Đang chấm lại các bài đã nộp…';
           const subs = (await S.be.list('subs', 'code', E0.code)).filter(x => x.status === 'done');
@@ -2392,7 +2440,7 @@ async function syncExamFiles(code){
     await S.be.set('keys', code, K);
     await S.be.set('exams', code, E);
     replaceExam(E);
-    for (const r of trash) await S.be.delImage(r);
+    await safeDelImages(trash, code);
     if (plan.regrade){
       const subs = (await S.be.list('subs', 'code', code)).filter(x => x.status === 'done');
       for (const sub of subs){
@@ -2421,6 +2469,233 @@ async function syncExamFiles(code){
   } catch(e){ toast('Cập nhật chưa xong: ' + (e.message || e), 'err'); }
 }
 
+/* ---------------- kho câu hỏi cũ (ghép đề mới) ---------------- */
+const QB_TARGET = { mc: 12, tf: 4, sa: 6 };
+async function toggleQBank(){
+  S.qb = S.qb || { open: false, targets: { ...QB_TARGET }, sel: new Set(), code: 'all', renumber: true };
+  S.qb.open = !S.qb.open;
+  paintQB();
+  if (S.qb.open && !S.qb.loaded) await loadQBank();
+}
+async function loadQBank(){
+  const Q = S.qb; Q.loading = true; paintQB();
+  try {
+    const [exams, keys] = await Promise.all([S.be.list('exams'), S.be.list('keys')]);
+    const keyBy = new Map(keys.map(k => [k.code || k.id, k]));
+    const items = [];
+    exams.sort((a, b) => b.createdAt - a.createdAt).forEach(E => {
+      const K = keyBy.get(E.code);
+      E.questions.forEach(q => {
+        const ans = K && K.answers ? K.answers[q.n] : undefined;
+        if (ans == null || ans === '') return;
+        items.push({ id: E.code + '_' + q.n, code: E.code, title: E.title, n: q.n, type: q.type, ans, qRefs: q.q || [], sRefs: (K.sol && K.sol[q.n]) || [] });
+      });
+    });
+    Q.items = items; Q.exams = exams.filter(E => items.some(i => i.code === E.code)); Q.loaded = true; Q.error = '';
+  } catch(e){ Q.error = 'Không tải được kho câu hỏi: ' + (e.message || e); }
+  S.qb.loading = false; paintQB();
+}
+function paintQB(){ const el = $('#qbank'); if (el){ el.innerHTML = qbHTML(); hydrate(el); } }
+const qbUsed = it => S.draft.questions.some(q => q.src && q.src.code === it.code && q.src.n === it.n);
+function qbVisible(){ const Q = S.qb; return (Q.items || []).filter(it => Q.code === 'all' || it.code === Q.code); }
+function qbHTML(){
+  const Q = S.qb;
+  if (!Q || !Q.open) return '';
+  if (Q.loading || (!Q.loaded && !Q.error)) return '<p class="hint" role="status" style="margin-top:12px">Đang mở kho câu hỏi…</p>';
+  if (Q.error) return `<p style="margin-top:12px">${errSpan(Q.error)}</p><button class="btn" data-act="qb-reload">Thử lại</button>`;
+  if (!(Q.items || []).length) return '<div class="empty" style="margin-top:12px">Chưa có đề cũ nào có đáp án để lấy câu.</div>';
+  const vis = qbVisible();
+  const byType = { mc: [], tf: [], sa: [] }; vis.forEach(it => byType[it.type] && byType[it.type].push(it));
+  const sec = t => `<h4>${TYPE_LABEL[t]} <span class="count-badge">${byType[t].length}</span><span id="qb-chip-${t}">${qbChip(t)}</span></h4>${byType[t].length ? byType[t].map(qbRow).join('') : '<p class="hint" style="padding:8px 2px">Không có câu nào.</p>'}`;
+  return `<div class="qb-head">
+      <label class="field" style="min-width:220px">Lấy từ đề<select class="input" id="qb-code"><option value="all">Tất cả các đề (${(Q.items || []).length} câu)</option>${Q.exams.map(E => `<option value="${esc(E.code)}" ${Q.code === E.code ? 'selected' : ''}>${esc(E.title)} (${(Q.items || []).filter(i => i.code === E.code).length} câu)</option>`).join('')}</select></label>
+      <div class="qb-targets">${['mc', 'tf', 'sa'].map(t => `<label class="field">${TYPE_LABEL[t]}<input class="input" type="number" min="0" max="50" data-qb-target="${t}" value="${esc(Q.targets[t])}"></label>`).join('')}</div>
+      <div class="row"><button class="btn primary" data-act="qb-auto">Ghép ngẫu nhiên vào danh sách</button><button class="btn" data-act="qb-random">Chỉ chọn ngẫu nhiên</button><button class="btn ghost" data-act="qb-clear" ${Q.sel.size ? '' : 'disabled'}>Bỏ chọn</button></div>
+    </div>
+    <div class="qb-count" id="qb-sum">${qbSum()}</div>
+    <div class="qb-list">${['mc', 'tf', 'sa'].map(sec).join('')}</div>
+    <div class="row" style="margin-top:14px"><button class="btn primary" data-act="qb-add" ${Q.sel.size ? '' : 'disabled'}>Thêm ${Q.sel.size} câu vào danh sách</button>
+      <label class="check" style="margin-left:6px"><input type="checkbox" id="qb-renum" ${Q.renumber ? 'checked' : ''}><span>Đánh số lại 1, 2, 3… theo thứ tự trắc nghiệm, đúng/sai, trả lời ngắn</span></label></div>`;
+}
+function qbSelN(t){ const Q = S.qb; return (Q.items || []).filter(it => Q.sel.has(it.id) && it.type === t).length; }
+function qbChip(t){ const Q = S.qb, n = qbSelN(t), g = +Q.targets[t] || 0; return `<span class="chip ${g && n === g ? 'ok' : g && n > g ? 'bad' : ''}">${TYPE_LABEL[t]}: ${n}${g ? '/' + g : ''}</span>`; }
+const qbSum = () => ['mc', 'tf', 'sa'].map(qbChip).join('') + `<span class="chip info">Tổng: ${S.qb.sel.size} câu</span>`;
+function qbSync(){
+  const Q = S.qb;
+  $$('[data-qb]').forEach(b => { const on = Q.sel.has(b.dataset.qb); b.checked = on; b.closest('.bank-row').classList.toggle('sel', on); });
+  const sum = $('#qb-sum'); if (sum) sum.innerHTML = qbSum();
+  ['mc', 'tf', 'sa'].forEach(t => { const el = $('#qb-chip-' + t); if (el) el.innerHTML = qbChip(t); });
+  const add = $('[data-act="qb-add"]'); if (add){ add.disabled = !Q.sel.size; add.textContent = `Thêm ${Q.sel.size} câu vào danh sách`; }
+  const clr = $('[data-act="qb-clear"]'); if (clr) clr.disabled = !Q.sel.size;
+}
+function qbRow(it){
+  const on = S.qb.sel.has(it.id), used = qbUsed(it);
+  return `<div class="bank-row ${on ? 'sel' : ''} ${used ? 'used' : ''}">
+    <input type="checkbox" data-qb="${esc(it.id)}" ${on ? 'checked' : ''} ${used ? 'disabled' : ''} aria-label="Chọn câu ${it.n} đề ${esc(it.title)}">
+    ${it.qRefs.length ? `<img class="bank-thumb" data-ref="${esc(it.qRefs[0])}" alt="">` : '<span class="hint">Không có ảnh</span>'}
+    <div><div><strong>Câu ${it.n}</strong> <span class="hint" style="display:inline">Đáp án: ${esc(it.ans)}${it.sRefs.length ? ', có lời giải' : ''}</span></div><div class="src-tag">${esc(it.title)} (${esc(it.code)})${used ? ' – đã có trong danh sách' : ''}</div></div>
+    <button class="btn small" data-act="qb-view" data-id="${esc(it.id)}">Xem câu</button>
+  </div>`;
+}
+async function qbView(id){
+  const it = (S.qb.items || []).find(x => x.id === id); if (!it) return;
+  const pr = modal({ title: `${it.title}, câu ${it.n}`, wide: true, ok: 'Đóng', cancel: '',
+    html: `<p class="hint">${TYPE_LABEL[it.type]}. Đáp án: <strong>${esc(it.ans)}</strong></p>${it.qRefs.map(r => `<img class="qimg" data-ref="${esc(r)}" alt="Câu ${it.n}">`).join('') || '<p class="hint">Không có ảnh đề.</p>'}${it.sRefs.length ? `<details><summary>Xem lời giải</summary>${it.sRefs.map(r => `<img class="qimg" data-ref="${esc(r)}" alt="Lời giải">`).join('')}</details>` : ''}` });
+  hydrate($('#modal-root'));
+  await pr;
+}
+function qbRandom(){
+  const Q = S.qb, vis = qbVisible();
+  ['mc', 'tf', 'sa'].forEach(t => {
+    const target = +Q.targets[t] || 0;
+    [...Q.sel].forEach(id => { const it = Q.items.find(x => x.id === id); if (it && it.type === t) Q.sel.delete(id); });
+    const pool = vis.filter(it => it.type === t && !qbUsed(it));
+    for (let i = pool.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    pool.slice(0, target).forEach(it => Q.sel.add(it.id));
+  });
+  qbSync();
+  const short = ['mc', 'tf', 'sa'].filter(t => (+Q.targets[t] || 0) > vis.filter(it => it.type === t && !qbUsed(it)).length);
+  if (short.length) toast(`Kho chưa đủ câu ${short.map(t => TYPE_LABEL[t].toLowerCase()).join(', ')}, đã lấy hết số có.`);
+}
+async function qbAdd(){
+  const Q = S.qb, d = S.draft;
+  const picked = (Q.items || []).filter(it => Q.sel.has(it.id) && !qbUsed(it));
+  if (!picked.length) return;
+  const order = { mc: 0, tf: 1, sa: 2 };
+  picked.sort((a, b) => order[a.type] - order[b.type] || a.code.localeCompare(b.code) || a.n - b.n);
+  const btn = $('[data-act="qb-add"]'); if (btn){ btn.disabled = true; btn.textContent = 'Đang thêm…'; }
+  try {
+    for (const it of picked){
+      const toImg = async refs => { const out = []; for (const r of refs) out.push({ ref: r, url: await imgUrl(r) }); return out; };
+      d.questions.push({ n: 0, type: it.type, answer: it.ans, manual: true, qImgs: await toImg(it.qRefs), sImgs: await toImg(it.sRefs), src: { code: it.code, n: it.n } });
+    }
+    if (Q.renumber) d.questions.sort((a, b) => order[a.type] - order[b.type]);
+    let k = Math.max(0, ...d.questions.map(q => q.n).filter(n => n > 0));
+    if (Q.renumber) d.questions.forEach((q, i) => { q.n = i + 1; });
+    else d.questions.forEach(q => { if (!q.n) q.n = ++k; });
+    Q.sel = new Set();
+    d.showErrors = false;
+    refreshQList(); paintQB();
+    toast(`Đã thêm ${picked.length} câu vào danh sách.`);
+  } catch(e){ toast('Không thêm được: ' + (e.message || e), 'err'); }
+  if (btn && btn.isConnected){ btn.disabled = false; btn.textContent = `Thêm ${Q.sel.size} câu vào danh sách`; }
+}
+
+async function qbAuto(){
+  S.qb = S.qb || { open: false, targets: { ...QB_TARGET }, sel: new Set(), code: 'all', renumber: true };
+  if (!S.qb.open){ S.qb.open = true; paintQB(); }
+  if (!S.qb.loaded) await loadQBank();
+  if (!S.qb.loaded || !(S.qb.items || []).length){ toast('Kho chưa có câu nào để ghép. Cần ít nhất một đề cũ đã có đáp án.', 'err'); return; }
+  qbRandom();
+  if (!S.qb.sel.size){ toast('Không chọn được câu nào. Kiểm tra lại số câu mỗi phần.', 'err'); return; }
+  await qbAdd();
+  const el = $('#qlist'); if (el) el.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+}
+async function shuffleExams(){
+  S.qb = S.qb || { open: false, targets: { ...QB_TARGET }, sel: new Set(), code: 'all', renumber: true };
+  if (!S.qb.loaded){ toast('Đang mở kho câu hỏi…'); await loadQBank(); }
+  const items = S.qb.items || [];
+  if (!items.length){ toast('Kho chưa có câu nào. Cần các đề cũ đã có đáp án.', 'err'); return; }
+  const byExam = new Map();
+  items.forEach(it => { const r = byExam.get(it.code) || { code: it.code, title: it.title, mc: 0, tf: 0, sa: 0, n: 0 }; r[it.type]++; r.n++; byExam.set(it.code, r); });
+  const exams = [...byExam.values()];
+  const d = S.draft;
+  const html = `<p class="hint">Chia toàn bộ câu của các đề đã chọn vào một loạt đề mới, mỗi câu chỉ dùng một lần. Đề mới dùng chung ảnh với đề cũ nên gần như không tốn thêm dung lượng.</p>
+    <fieldset class="pick"><legend>Đề nguồn</legend><div class="pick-grid">${exams.map(e => `<label class="check"><input type="checkbox" name="sh-src" value="${esc(e.code)}" checked><span>${esc(e.title)} <span class="hint" style="display:inline">(${e.mc} TN, ${e.tf} Đ/S, ${e.sa} TLN)</span></span></label>`).join('')}</div></fieldset>
+    <div class="es-grid" style="margin-top:14px">
+      <label class="field full">Tên đề mới (trang tự thêm số 1, 2, 3…)<input class="input" id="sh-title" value="Đề ôn tập"></label>
+      <label class="field">Số đề tạo<input class="input" type="number" min="1" max="50" id="sh-n" value="10"></label>
+      <label class="field">Trắc nghiệm mỗi đề<input class="input" type="number" min="0" max="50" id="sh-mc" value="${+S.qb.targets.mc || 12}"></label>
+      <label class="field">Đúng/Sai mỗi đề<input class="input" type="number" min="0" max="50" id="sh-tf" value="${+S.qb.targets.tf || 4}"></label>
+      <label class="field">Trả lời ngắn mỗi đề<input class="input" type="number" min="0" max="50" id="sh-sa" value="${+S.qb.targets.sa || 6}"></label>
+    </div>
+    <label class="check" style="margin-top:12px"><input type="checkbox" id="sh-del"><span><strong>Xoá các đề nguồn sau khi tạo xong</strong>, cùng toàn bộ bài nộp của chúng. Nên bấm “Sao lưu tất cả kết quả” ở mục Kết quả trước.</span></label>
+    <p class="hint" style="margin-top:12px">Đề mới dùng cài đặt đang đặt ở khung Tạo đề: ${esc(d.teacher || LS.get('tt_teacher') || '(chưa nhập tên giáo viên)')}, ${Math.round(+d.duration) || 90} phút, ${+d.maxLogins ? d.maxLogins + ' lượt mỗi thiết bị' : 'không giới hạn lượt'}. Sửa ở trên rồi mở lại nếu cần.</p>
+    <div id="sh-msg" class="hint" role="status"></div>`;
+  let plan = null;
+  const ok = await modal({ title: 'Trộn lại nhiều đề', html, wide: true, ok: 'Xem trước',
+    validate: async () => {
+      const codes = $$('input[name="sh-src"]:checked').map(x => x.value);
+      if (!codes.length) return 'Chọn ít nhất một đề nguồn.';
+      const t = { mc: +$('#sh-mc').value, tf: +$('#sh-tf').value, sa: +$('#sh-sa').value };
+      if (['mc', 'tf', 'sa'].some(k => isNaN(t[k]) || t[k] < 0 || t[k] > 50)) return 'Số câu mỗi phần từ 0 đến 50.';
+      const per = t.mc + t.tf + t.sa; if (!per) return 'Mỗi đề phải có ít nhất một câu.';
+      const n = Math.round(+$('#sh-n').value);
+      if (!(n >= 1 && n <= 50)) return 'Số đề tạo từ 1 đến 50.';
+      const title = $('#sh-title').value.trim(); if (!title) return 'Nhập tên đề mới.';
+      const teacher = (S.draft.teacher || LS.get('tt_teacher') || '').trim(); if (!teacher) return 'Nhập họ tên giáo viên ở khung Tạo đề phía trên trước.';
+      const pool = { mc: [], tf: [], sa: [] };
+      items.forEach(it => { if (codes.includes(it.code)) pool[it.type].push(it); });
+      const maxN = Math.min(...['mc', 'tf', 'sa'].map(k => t[k] ? Math.floor(pool[k].length / t[k]) : Infinity));
+      if (!isFinite(maxN)) return 'Cấu trúc đề không hợp lệ.';
+      if (n > maxN) return `Kho chỉ đủ tạo ${maxN} đề (có ${pool.mc.length} trắc nghiệm, ${pool.tf.length} đúng/sai, ${pool.sa.length} trả lời ngắn). Giảm số đề hoặc bớt số câu mỗi phần.`;
+      ['mc', 'tf', 'sa'].forEach(k => { for (let i = pool[k].length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [pool[k][i], pool[k][j]] = [pool[k][j], pool[k][i]]; } });
+      plan = { codes, t, n, title, teacher, pool, used: n * per, total: pool.mc.length + pool.tf.length + pool.sa.length, del: $('#sh-del').checked };
+      return '';
+    } });
+  if (!ok || !plan) return;
+  const ok2 = await modal({ title: 'Tạo đề mới?', kind: 'danger', ok: 'Tạo đề',
+    body: `Sẽ tạo ${plan.n} đề: “${plan.title} 1” đến “${plan.title} ${plan.n}”, mỗi đề ${plan.t.mc} trắc nghiệm, ${plan.t.tf} đúng/sai, ${plan.t.sa} trả lời ngắn. Dùng ${plan.used}/${plan.total} câu trong kho, không câu nào lặp lại giữa các đề.${plan.del ? ` Sau đó xoá ${plan.codes.length} đề nguồn cùng toàn bộ bài nộp của chúng.` : ''}` });
+  if (!ok2) return;
+  const d2 = S.draft, sc = d2.scoring;
+  const base = {
+    teacher: plan.teacher, duration: Math.round(+d2.duration) || 90,
+    maxLogins: Math.max(0, Math.round(+d2.maxLogins || 0)), preventReload: !!d2.preventReload,
+    openAt: d2.openAt ? new Date(d2.openAt).getTime() : null, closeAt: d2.closeAt ? new Date(d2.closeAt).getTime() : null,
+    showAnswers: !!d2.showAnswers, showScore: !!d2.showScore,
+    maxViol: Math.round(+d2.maxViol || 0), fullscreen: !!d2.fullscreen,
+    scoring: { mc: +sc.mc, sa: +sc.sa, tf: [0, +sc.tf1, +sc.tf2, +sc.tf3, +sc.tf4] }
+  };
+  const made = [];
+  try {
+    const idx = { mc: 0, tf: 0, sa: 0 };
+    for (let i = 0; i < plan.n; i++){
+      toast(`Đang tạo đề ${i + 1}/${plan.n}…`);
+      const questions = [], answers = {}, sol = {};
+      let k = 1;
+      for (const type of ['mc', 'tf', 'sa']){
+        for (let j = 0; j < plan.t[type]; j++){
+          const it = plan.pool[type][idx[type]++];
+          questions.push({ n: k, type, q: it.qRefs, src: { code: it.code, n: it.n } });
+          answers[k] = it.ans;
+          if (it.sRefs.length) sol[k] = it.sRefs;
+          k++;
+        }
+      }
+      const code = await freeCode();
+      const exam = { ...base, code, title: `${plan.title} ${i + 1}`, createdAt: Date.now() + i, questions };
+      await S.be.set('keys', code, { code, answers, sol });
+      await S.be.set('exams', code, exam);
+      made.push(exam);
+    }
+    if (plan.del){
+      toast('Đang xoá các đề nguồn…');
+      await purgeExams(plan.codes);
+    }
+    S.qb.loaded = false; S.qb.sel = new Set();
+    await loadExams();
+    if (S.qb.open) await loadQBank();
+    await modal({ title: `Đã tạo ${made.length} đề`, wide: true, ok: 'Đóng', cancel: '',
+      html: `<div class="table-wrap"><table><thead><tr><th>Tên đề</th><th>Mã đề</th><th class="num">Số câu</th></tr></thead><tbody>${made.map(E => `<tr><td>${esc(E.title)}</td><td><strong class="code-inline">${esc(E.code)}</strong></td><td class="num">${E.questions.length}</td></tr>`).join('')}</tbody></table></div><p class="hint" style="margin-top:10px">Gửi mã cho học sinh khi cần. Xem lại danh sách ở thẻ Quản lý đề.${plan.del ? ' Các đề nguồn đã được xoá.' : ''}</p>` });
+  } catch(e){
+    toast('Dừng giữa chừng: ' + (e.message || e) + `. Đã tạo ${made.length} đề.`, 'err');
+    await loadExams();
+  }
+}
+async function exportDraftKey(){
+  const d = S.draft;
+  if (!d.questions.length){ toast('Danh sách chưa có câu nào.', 'err'); return; }
+  if (!window.XLSX){ toast('Không tải được thư viện Excel. Kiểm tra mạng rồi tải lại trang.', 'err'); return; }
+  const rows = [['STT', 'Đáp án', 'Loại câu', 'Lấy từ đề', 'Câu gốc'],
+    ...d.questions.map(q => [q.n, canon(q) || String(q.answer || ''), TYPE_LABEL[q.type], q.src ? q.src.code : '', q.src ? q.src.n : ''])];
+  const ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = [{ wch: 6 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 10 }];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Đáp án');
+  const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const slug = (d.title || 'de-moi').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'de_moi';
+  try { await S.be.save(`Dap_an_${slug}.xlsx`, new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); }
+  catch(e){ if (!(e && e.code === 'declined')) toast('Không tải được file: ' + ((e && (e.message || e.code)) || e), 'err'); }
+}
+
 /* ---------------- sự kiện ---------------- */
 document.addEventListener('click', e => {
   const im = e.target.closest('.qimg[src]');
@@ -2437,6 +2712,15 @@ document.addEventListener('click', async e => {
     case 'ttab': stopLive(); S.ttab = el.dataset.k; render(); if (S.ttab !== 'create') loadExams(); if (S.ttab === 'psets') loadPsets(); if (S.ttab === 'bank') loadBank(); break;
     case 'import': doImport(); break;
     case 'q-add': addQ(); break;
+    case 'qb-open': toggleQBank(); break;
+    case 'qb-reload': loadQBank(); break;
+    case 'qb-random': qbRandom(); break;
+    case 'qb-auto': qbAuto(); break;
+    case 'qb-shuffle': shuffleExams(); break;
+    case 'q-xls': exportDraftKey(); break;
+    case 'qb-clear': S.qb.sel = new Set(); qbSync(); break;
+    case 'qb-add': qbAdd(); break;
+    case 'qb-view': qbView(el.dataset.id); break;
     case 'q-del': delQ(+el.dataset.i); break;
     case 'publish': publish(); break;
     case 'live-start': startLive(); break;
@@ -2514,6 +2798,10 @@ document.addEventListener('input', onField);
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.dataset.flag){ setFlag(t.dataset.flag, t.checked, t); return; }
+  if (t.dataset.qb){ if (t.checked) S.qb.sel.add(t.dataset.qb); else S.qb.sel.delete(t.dataset.qb); qbSync(); return; }
+  if (t.dataset.qbTarget){ S.qb.targets[t.dataset.qbTarget] = t.value; qbSync(); return; }
+  if (t.id === 'qb-code'){ S.qb.code = t.value; paintQB(); return; }
+  if (t.id === 'qb-renum'){ S.qb.renumber = t.checked; return; }
   if (t.dataset.bank){ bankToggle(t.dataset.bank, t.checked); bankSyncBar(); return; }
   if (t.dataset.bankAll){ bankVisible().filter(it => it.q.type === t.dataset.bankAll).forEach(it => bankToggle(it.id, t.checked)); bankSyncBar(); return; }
   if (t.id === 'bk-st' || t.id === 'bk-code'){ S.bank[t.id === 'bk-st' ? 'st' : 'code'] = t.value; S.bank.sel = new Set(); paintBank(); return; }
