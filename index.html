@@ -776,9 +776,9 @@ function manageTab(){
   const now = Date.now();
   const st = E => E.openAt && now < E.openAt ? '<span class="status-wait">Chưa mở</span>' : E.closeAt && now > E.closeAt ? '<span class="status-closed">Đã đóng</span>' : '<span class="status-open">Đang mở</span>';
   return `<section class="block"><h2>Quản lý đề</h2>
-    <p class="hint" style="margin-bottom:14px">Bấm Cài đặt để đổi tên đề, thời gian làm bài, số lượt vào thi, giờ mở/đóng đề hoặc cấp lại lượt cho tất cả. Muốn cộng giờ hay cấp lại lượt cho riêng một em, dùng mục Theo dõi trực tiếp.</p>
+    <p class="hint" style="margin-bottom:14px">Bấm Cài đặt để đổi tên đề, thời gian làm bài, số lượt vào thi, giờ mở/đóng đề hoặc cấp lại lượt cho tất cả. Muốn cộng giờ hay cấp lại lượt cho riêng một em, dùng mục Theo dõi trực tiếp. Bấm “Cập nhật từ file” để sửa đáp án hoặc ảnh của đề đã tạo bằng file Excel và ảnh mới, “Tải đáp án” để lấy file Excel đúng với đề đang chạy.</p>
     <div class="table-wrap"><table><thead><tr><th>Tên đề</th><th></th><th>Mã</th><th>Trạng thái</th><th class="num">Số câu</th><th class="num">Thời gian</th><th class="num">Lượt mỗi thiết bị</th><th>Mở đề</th><th>Đóng đề</th><th>Tạo lúc</th></tr></thead><tbody>
-    ${S.exams.map(E => `<tr><td><strong>${esc(E.title)}</strong></td><td><div class="row nowrap"><button class="btn small" data-act="exam-edit" data-code="${esc(E.code)}">Cài đặt</button><button class="btn small danger" data-act="del-exam" data-code="${esc(E.code)}">Xoá đề</button></div></td><td class="code-inline">${esc(E.code)}</td><td>${st(E)}</td><td class="num">${E.questions.length}</td><td class="num">${E.duration} phút</td><td class="num">${E.maxLogins || 'Không giới hạn'}</td><td>${E.openAt ? fmtDate(E.openAt) : '–'}</td><td>${E.closeAt ? fmtDate(E.closeAt) : '–'}</td><td>${fmtDate(E.createdAt)}</td></tr>`).join('')}
+    ${S.exams.map(E => `<tr><td><strong>${esc(E.title)}</strong></td><td><div class="row nowrap"><button class="btn small" data-act="exam-edit" data-code="${esc(E.code)}">Cài đặt</button><button class="btn small" data-act="exam-sync" data-code="${esc(E.code)}">Cập nhật từ file</button><button class="btn small" data-act="exam-key" data-code="${esc(E.code)}">Tải đáp án</button><button class="btn small danger" data-act="del-exam" data-code="${esc(E.code)}">Xoá đề</button></div></td><td class="code-inline">${esc(E.code)}</td><td>${st(E)}</td><td class="num">${E.questions.length}</td><td class="num">${E.duration} phút</td><td class="num">${E.maxLogins || 'Không giới hạn'}</td><td>${E.openAt ? fmtDate(E.openAt) : '–'}</td><td>${E.closeAt ? fmtDate(E.closeAt) : '–'}</td><td>${fmtDate(E.createdAt)}</td></tr>`).join('')}
     </tbody></table></div></section>`;
 }
 async function editExam(code){
@@ -2279,6 +2279,148 @@ async function replaceQuestion(id){
   if (S.res && S.res.code === E0.code) loadResults(E0.code);
 }
 
+/* ---------------- cập nhật đề từ file, xuất đáp án ---------------- */
+async function exportKey(code){
+  if (!window.XLSX){ toast('Không tải được thư viện Excel. Kiểm tra mạng rồi tải lại trang.', 'err'); return; }
+  let E, key;
+  try { [E, key] = await Promise.all([S.be.get('exams', code), S.be.get('keys', code)]); } catch(e){ toast('Không tải được đề: ' + (e.message || e), 'err'); return; }
+  if (!E || !key){ toast('Không tìm thấy đề này.', 'err'); return; }
+  const rows = [['STT', 'Đáp án', 'Loại câu', 'Có ảnh đề', 'Có lời giải'],
+    ...E.questions.map(q => [q.n, key.answers ? key.answers[q.n] : '', TYPE_LABEL[q.type], (q.q || []).length ? 'Có' : '', ((key.sol || {})[q.n] || []).length ? 'Có' : ''])];
+  const ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = [{ wch: 6 }, { wch: 12 }, { wch: 16 }, { wch: 10 }, { wch: 12 }];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Đáp án');
+  const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  try { await S.be.save(`Dap_an_${code}.xlsx`, new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); }
+  catch(e){ if (!(e && e.code === 'declined')) toast('Không tải được file: ' + ((e && (e.message || e.code)) || e), 'err'); }
+}
+async function syncExamFiles(code){
+  const E0 = S.exams.find(x => x.code === code); if (!E0) return;
+  const html = `<p class="hint">Chọn file Excel đáp án và ảnh mới (đặt tên như lúc tạo đề: Cau_01.png, Da_01.png, hoặc một file .zip). Trang sẽ so sánh với đề đang chạy và cho thầy cô duyệt trước khi áp dụng. Phần nào không chọn file thì giữ nguyên.</p>
+    <div class="es-grid">
+      <label class="field full">File đáp án (Excel)<input class="input" type="file" id="sy-x" accept=".xlsx,.xls,.csv"></label>
+      <label class="field full">Ảnh câu hỏi và lời giải<input class="input" type="file" id="sy-img" accept="image/*,.zip" multiple></label>
+    </div>
+    <div class="checks" style="margin:12px 0 4px">
+      <label class="check"><input type="checkbox" id="sy-new" checked><span>Thêm câu mới nếu file có câu chưa có trong đề</span></label>
+      <label class="check"><input type="checkbox" id="sy-regrade" checked><span>Chấm lại các bài đã nộp theo đáp án mới</span></label>
+      <label class="check"><input type="checkbox" id="sy-reset" checked><span>Bắt học sinh luyện lại những câu có thay đổi</span></label>
+    </div>
+    <div id="sy-msg" class="hint" role="status"></div>`;
+  let plan = null;
+  const ok1 = await modal({ title: `Cập nhật đề ${code} từ file`, html, wide: true, ok: 'Xem thay đổi',
+    validate: async () => {
+      const msg = $('#sy-msg');
+      const xf = $('#sy-x').files[0], imgFiles = [...$('#sy-img').files];
+      if (!xf && !imgFiles.length) return 'Chọn file Excel hoặc ảnh trước.';
+      msg.textContent = 'Đang đọc file…';
+      try {
+        const key = {}, imgs = { q: {}, s: {} }, skipped = [];
+        const addImg = (name, blob) => { const c = classify(name); if (!c){ skipped.push(name); return; } (imgs[c.kind][c.n] = imgs[c.kind][c.n] || []).push({ name, blob }); };
+        const readZip = async f => {
+          if (!window.JSZip) throw new Error('Không tải được thư viện đọc file zip.');
+          const zip = await JSZip.loadAsync(f);
+          for (const e of Object.values(zip.files)){
+            if (e.dir || e.name.includes('__MACOSX')) continue;
+            const base = e.name.split('/').pop(); if (!base || base.startsWith('.')) continue;
+            if (IMG_RE.test(base)){ const bl = await e.async('blob'); addImg(base, new Blob([bl], { type: mimeOf(base) })); }
+            else if (SHEET_RE.test(base)) Object.assign(key, parseSheet(await e.async('arraybuffer')));
+          }
+        };
+        if (xf) Object.assign(key, parseSheet(await xf.arrayBuffer()));
+        for (const f of imgFiles){
+          if (/\.zip$/i.test(f.name)) await readZip(f);
+          else if (IMG_RE.test(f.name)) addImg(f.name, f);
+          else if (SHEET_RE.test(f.name)) Object.assign(key, parseSheet(await f.arrayBuffer()));
+          else skipped.push(f.name);
+        }
+        const E = await S.be.get('exams', code); if (!E) return 'Không tìm thấy đề, có thể đã bị xoá.';
+        const K = (await S.be.get('keys', code)) || { code, answers: {}, sol: {} };
+        const sortI = a => (a || []).sort((x, y) => x.name.localeCompare(y.name, undefined, { numeric: true }));
+        const changes = [];
+        E.questions.forEach(q => {
+          const raw = key[q.n] !== undefined ? String(key[q.n]).trim() : '';
+          const type = raw ? (detectType(raw) || q.type) : q.type;
+          const ans = raw ? canon({ type, answer: raw }) : null;
+          const old = K.answers ? K.answers[q.n] : undefined;
+          const parts = [];
+          if (raw && ans && (ans !== old || type !== q.type)) parts.push(`đáp án ${esc(old != null ? old : '(trống)')} → ${esc(ans)}${type !== q.type ? ` (${TYPE_LABEL[type]})` : ''}`);
+          if (imgs.q[q.n]) parts.push(`${imgs.q[q.n].length} ảnh đề mới`);
+          if (imgs.s[q.n]) parts.push(`${imgs.s[q.n].length} ảnh lời giải mới`);
+          if (parts.length) changes.push({ n: q.n, kind: 'edit', type, ans: raw ? ans : old, qImgs: imgs.q[q.n] ? sortI(imgs.q[q.n]) : null, sImgs: imgs.s[q.n] ? sortI(imgs.s[q.n]) : null, text: parts.join(', ') });
+        });
+        const has = new Set(E.questions.map(q => q.n));
+        if ($('#sy-new').checked){
+          [...new Set([...Object.keys(key), ...Object.keys(imgs.q)].map(Number))].filter(n => n > 0 && !has.has(n)).sort((a, b) => a - b).forEach(n => {
+            const raw = key[n] !== undefined ? String(key[n]).trim() : '';
+            if (!raw) return;
+            const type = detectType(raw) || 'mc';
+            changes.push({ n, kind: 'add', type, ans: canon({ type, answer: raw }), qImgs: imgs.q[n] ? sortI(imgs.q[n]) : null, sImgs: imgs.s[n] ? sortI(imgs.s[n]) : null, text: `câu mới, đáp án ${esc(canon({ type, answer: raw }))}${imgs.q[n] ? `, ${imgs.q[n].length} ảnh đề` : ', chưa có ảnh đề'}` });
+          });
+        }
+        if (!changes.length) return 'File giống hệt đề đang chạy, không có gì phải cập nhật.';
+        if ((changes.some(c => c.qImgs || c.sImgs)) && !S.be.canUpload) return 'Tài khoản đang mở trang không có quyền tải ảnh lên.';
+        plan = { E, K, changes, skipped, regrade: $('#sy-regrade').checked, reset: $('#sy-reset').checked };
+      } catch(e){ return 'Không đọc được file: ' + (e.message || e); }
+      return '';
+    } });
+  if (!ok1 || !plan) return;
+  const list = plan.changes.map(c => `<tr><td>Câu ${c.n}</td><td>${c.kind === 'add' ? 'Thêm mới' : 'Sửa'}</td><td style="white-space:normal">${c.text}</td></tr>`).join('');
+  const ok2 = await modal({ title: 'Áp dụng thay đổi?', wide: true, ok: 'Áp dụng', kind: 'danger',
+    html: `<p>${plan.changes.length} câu sẽ thay đổi trong đề “${esc(plan.E.title)}”.${plan.skipped.length ? ` Bỏ qua ${plan.skipped.length} file không đúng tên.` : ''}</p>
+      <div class="table-wrap"><table><thead><tr><th>Câu</th><th>Việc</th><th>Thay đổi</th></tr></thead><tbody>${list}</tbody></table></div>
+      <p class="hint" style="margin-top:10px">${plan.regrade ? 'Các bài đã nộp sẽ được chấm lại theo đáp án mới. ' : 'Không chấm lại bài đã nộp. '}${plan.reset ? 'Học sinh phải luyện lại các câu này.' : ''}</p>` });
+  if (!ok2) return;
+  toast('Đang cập nhật đề…');
+  try {
+    const { E, K, changes } = plan;
+    K.answers = { ...(K.answers || {}) }; K.sol = { ...(K.sol || {}) };
+    const trash = [];
+    for (const c of changes){
+      const up = async files => { const refs = []; for (const f of files) refs.push(await S.be.putImage(await fitImage(f.blob, S.be.imgLimit))); return refs; };
+      const newQ = c.qImgs ? await up(c.qImgs) : null, newS = c.sImgs ? await up(c.sImgs) : null;
+      if (c.kind === 'add'){
+        E.questions.push({ n: c.n, type: c.type, q: newQ || [] });
+        E.questions.sort((a, b) => a.n - b.n);
+      } else {
+        const qi = E.questions.findIndex(q => q.n === c.n);
+        if (newQ) trash.push(...(E.questions[qi].q || []));
+        E.questions[qi] = { n: c.n, type: c.type, q: newQ || E.questions[qi].q };
+      }
+      if (c.ans != null) K.answers[c.n] = c.ans;
+      if (newS){ trash.push(...((K.sol[c.n]) || [])); K.sol[c.n] = newS; }
+    }
+    await S.be.set('keys', code, K);
+    await S.be.set('exams', code, E);
+    replaceExam(E);
+    for (const r of trash) await S.be.delImage(r);
+    if (plan.regrade){
+      const subs = (await S.be.list('subs', 'code', code)).filter(x => x.status === 'done');
+      for (const sub of subs){
+        const g = grade(E, K, sub.answers || {});
+        const body = { ...sub }; delete body.id;
+        await S.be.set('subs', sub.id, { ...body, score: g.score, max: g.max, correct: g.correct, perQ: g.perQ });
+      }
+    }
+    if (plan.reset){
+      const ids = new Set(changes.map(c => code + '_' + c.n));
+      for (const doc of await S.be.list('practice')){
+        const m = { ...(doc.mastered || {}) }; let hit = false;
+        ids.forEach(id => { if (m[id] != null){ delete m[id]; hit = true; } });
+        if (hit){ const body = { ...doc }; delete body.id; await S.be.set('practice', doc.id, { ...body, mastered: m }); }
+      }
+      for (const doc of await S.be.list('presults')){
+        const its = { ...(doc.items || {}) }; let hit = false;
+        ids.forEach(id => { if (its[id] != null){ delete its[id]; hit = true; } });
+        if (hit){ const body = { ...doc }; delete body.id; await S.be.set('presults', doc.id, { ...body, items: its }); }
+      }
+    }
+    IMG_CACHE.clear();
+    toast(`Đã cập nhật ${changes.length} câu của đề ${code}.`);
+    await loadExams();
+    if (S.res && S.res.code === code) loadResults(code);
+  } catch(e){ toast('Cập nhật chưa xong: ' + (e.message || e), 'err'); }
+}
+
 /* ---------------- sự kiện ---------------- */
 document.addEventListener('click', e => {
   const im = e.target.closest('.qimg[src]');
@@ -2318,6 +2460,8 @@ document.addEventListener('click', async e => {
     case 'cmt': editComment(el.dataset.id); break;
     case 'sub-view': viewSub(el.dataset.id); break;
     case 'exam-edit': editExam(el.dataset.code); break;
+    case 'exam-sync': syncExamFiles(el.dataset.code); break;
+    case 'exam-key': exportKey(el.dataset.code); break;
     case 'add-time': addTime(el.dataset.id); break;
     case 'reset-login': resetLogin(el.dataset.id); break;
     case 'pv-start': startPreview(); break;
