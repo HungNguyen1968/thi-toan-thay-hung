@@ -144,6 +144,7 @@ select.input{cursor:pointer}
 .publish-row{margin-top:18px;padding-top:18px;border-top:2px solid var(--ink)}
 .live-bar{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;margin:18px 0 14px;padding:10px 14px;border-radius:8px;background:var(--pen-soft)}
 .live-dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
+.bad-text{color:var(--red)}
 .live-dot.on{background:var(--green);box-shadow:0 0 0 4px color-mix(in srgb,var(--green) 25%,transparent)}
 .zoom{display:flex;align-items:center;gap:6px}
 .zv{min-width:48px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
@@ -660,7 +661,7 @@ function newDraft(){
 }
 const S = {
   be: null, view: 'boot', role: null, teacher: false, ttab: 'create', draft: newDraft(), exams: [],
-  live: { code: '', watching: '', unsub: null, subs: [], zoom: 1, tick: null, ok: false },
+  live: { code: '', watching: '', unsub: null, subs: [], zoom: 1, tick: null, ok: false, auto: true },
   res: { code: '' }, st: { code: '', exam: null }, h: { name: '' }, p: null, x: null, xTick: null, done: null
 };
 const loadSess = code => LS.getJSON('tt_sess_' + code);
@@ -1054,6 +1055,8 @@ function liveTab(){
   return `<section class="block"><h2>Theo dõi học sinh làm bài</h2>
     <div class="row">${examSelect('live-code', L.code || (S.exams[0] && S.exams[0].code))}${S.exams.length ? `<button class="btn primary" data-act="live-start">Theo dõi ngay</button>` : ''}</div>
     ${L.watching ? `<div class="live-bar"><span class="live-dot" id="live-dot" aria-hidden="true"></span><span id="live-status" aria-live="polite">Đang kết nối…</span><span class="spacer"></span>
+      <label class="check" style="font-size:14px"><input type="checkbox" id="live-auto" ${S.live.auto === false ? '' : 'checked'}><span>Tự chốt bài khi học sinh hết giờ</span></label>
+      <button class="btn small" data-act="close-late">Chốt bài hết giờ</button>
       <span class="zoom" role="group" aria-label="Thu phóng danh sách"><span class="hint">Zoom</span><button class="btn small" data-act="zoom" data-z="-1" aria-label="Thu nhỏ">−</button><span class="zv" id="zv">${Math.round(L.zoom * 100)}%</span><button class="btn small" data-act="zoom" data-z="1" aria-label="Phóng to">+</button><button class="btn small ghost" data-act="zoom" data-z="0">Đặt lại</button></span></div>
       <div id="live-grid"></div>` : `<p class="hint" style="margin-top:14px">Chọn đề rồi bấm “Theo dõi ngay”. Danh sách tự cập nhật khi học sinh làm bài.</p>`}
   </section>`;
@@ -1080,6 +1083,44 @@ function showVlog(id){
   const r = S.live.subs.find(x => x.id === id); if (!r) return;
   modal({ title: `Nhật ký vi phạm: ${r.name}`, html: `${r.multi ? '<p><span class="chip bad">Máy đang nối nhiều màn hình</span></p>' : ''}${vlogHTML(r.vlog)}`, wide: true, ok: 'Đóng', cancel: '' });
 }
+const closing = new Set();
+async function closeSub(id, byTeacher, given){
+  const sub = given || (S.live.subs || []).find(x => x.id === id);
+  if (!sub || sub.status === 'done' || closing.has(id)) return false;
+  let E = S.exams.find(e => e.code === sub.code);
+  if (!E) try { E = await S.be.get('exams', sub.code); } catch(e){}
+  if (!E) return false;
+  closing.add(id);
+  try {
+    const key = await S.be.get('keys', sub.code);
+    if (!key) throw new Error('Không tải được đáp án');
+    const g = grade(E, key, sub.answers || {});
+    const end = sub.endAt + extraFor(E, id) * 60000;
+    const doc = { ...sub }; delete doc.id;
+    await S.be.set('subs', id, { ...doc, status: 'done', submittedAt: Math.min(Date.now(), end), reason: 'timeout', closedBy: 'teacher', score: g.score, max: g.max, correct: g.correct, perQ: g.perQ });
+    if (byTeacher) toast(`Đã chốt bài của ${sub.name}: ${fmtNum(g.score)} điểm.`);
+    return true;
+  } catch(e){
+    if (byTeacher) toast('Không chốt được bài: ' + (e.message || e), 'err');
+    return false;
+  } finally { setTimeout(() => closing.delete(id), 4000); }
+}
+async function closeAllLate(){
+  const E = S.exams.find(e => e.code === S.live.watching); if (!E) return;
+  const now = Date.now();
+  const late = (S.live.subs || []).filter(s => s.status !== 'done' && now > s.endAt + extraFor(E, s.id) * 60000 + 30000);
+  if (!late.length){ toast('Không có bài nào quá giờ mà chưa nộp.'); return; }
+  if (!await modal({ title: 'Chốt bài hết giờ?', body: `Chốt ${late.length} bài của: ${late.map(s => s.name).join(', ')}. Bài được chấm theo phần các em đã làm và đã lưu.`, ok: 'Chốt bài' })) return;
+  let n = 0;
+  for (const s of late) if (await closeSub(s.id, false)) n++;
+  toast(`Đã chốt ${n} bài.`);
+}
+function autoCloseLate(){
+  const L = S.live; if (!L.auto || !L.watching) return;
+  const E = S.exams.find(e => e.code === L.watching); if (!E) return;
+  const now = Date.now();
+  (L.subs || []).forEach(s => { if (s.status !== 'done' && now > s.endAt + extraFor(E, s.id) * 60000 + 30000) closeSub(s.id, false); });
+}
 function stopLive(){ if (S.live.unsub) S.live.unsub(); S.live.unsub = null; clearInterval(S.live.tick); S.live.watching = ''; }
 function paintLive(force){
   const L = S.live, grid = $('#live-grid'); if (!grid) return;
@@ -1087,8 +1128,10 @@ function paintLive(force){
   const rows = L.subs.map(s => { const doing = s.status !== 'done'; const extra = extraFor(E, s.id); const left = (s.endAt + extra * 60000 - now) / 1000; return { ...s, doing, extra, left, lost: doing && left < -120 }; })
     .sort((a, b) => (b.doing - a.doing) || String(a.name).localeCompare(String(b.name), 'vi'));
   const doingN = rows.filter(r => r.doing && !r.lost).length, doneN = rows.filter(r => !r.doing).length;
+  const lateN = rows.filter(r => r.doing && r.left <= 0).length;
+  autoCloseLate();
   $('#live-dot').className = 'live-dot' + (L.ok ? ' on' : '');
-  $('#live-status').innerHTML = L.ok ? `Đang cập nhật. Đang thi: <strong>${doingN}</strong> học sinh. Đã nộp: <strong>${doneN}</strong>.` : 'Đang kết nối…';
+  $('#live-status').innerHTML = L.ok ? `Đang cập nhật. Đang thi: <strong>${doingN}</strong> học sinh. Đã nộp: <strong>${doneN}</strong>.${lateN ? ` <strong class="bad-text">Quá giờ chưa nộp: ${lateN}</strong>.` : ''}` : 'Đang kết nối…';
   const stOf = r => !r.doing ? 'done' : r.lost ? 'lost' : 'doing';
   const sig = JSON.stringify([L.zoom, total, E && E.maxLogins, rows.map(r => [r.id, stOf(r), r.answered, r.violations, r.score, r.extra, r.name, r.cls, (r.vlog || []).length, r.awayNow, r.multi])]);
   if (!force && sig === L.sig){
@@ -1100,7 +1143,7 @@ function paintLive(force){
     const st = stOf(r);
     const foot = st === 'done' ? `Đã nộp ${fmtTime(r.submittedAt)}, ${fmtNum(r.score)} điểm` : st === 'lost' ? 'Hết giờ, chưa nộp bài' : `Còn <span data-left="${esc(r.id)}">${fmtClock(r.left)}</span>`;
     const pct = total ? Math.round((r.answered || 0) / total * 100) : 0;
-    const acts = `${(r.vlog || []).length ? `<button class="btn" data-act="vlog" data-id="${esc(r.id)}">Nhật ký</button>` : ''}${st !== 'done' ? `<button class="btn" data-act="add-time" data-id="${esc(r.id)}">+ Thêm giờ</button>` : ''}${r.device && E && E.maxLogins > 0 ? `<button class="btn" data-act="reset-login" data-id="${esc(r.id)}">Cấp lại lượt</button>` : ''}`;
+    const acts = `${(r.vlog || []).length ? `<button class="btn" data-act="vlog" data-id="${esc(r.id)}">Nhật ký</button>` : ''}${st !== 'done' && r.left <= 0 ? `<button class="btn" data-act="close-sub" data-id="${esc(r.id)}">Chốt bài</button>` : ''}${st !== 'done' ? `<button class="btn" data-act="add-time" data-id="${esc(r.id)}">+ Thêm giờ</button>` : ''}${r.device && E && E.maxLogins > 0 ? `<button class="btn" data-act="reset-login" data-id="${esc(r.id)}">Cấp lại lượt</button>` : ''}`;
     return `<article class="lcard ${st}"><div class="lname" title="${esc(r.name)}">${esc(r.name)}</div><span class="hint">${r.cls ? 'Lớp ' + esc(r.cls) : 'Chưa ghi lớp'}</span><div class="lbar"><i style="width:${pct}%"></i></div><div class="lstats"><span>Đã làm ${r.answered || 0}/${total}</span><span class="${r.violations ? 'bad' : ''}">Vi phạm ${r.violations || 0}</span></div><div class="lfoot">${foot}${r.extra ? `<span class="extra-badge">+${r.extra} phút</span>` : ''}</div>${liveVio(r, st)}${acts ? `<div class="lactions">${acts}</div>` : ''}</article>`;
   }).join('')}</div>` : `<div class="empty">Chưa có học sinh nào vào thi đề ${esc(L.watching)}.</div>`;
 }
@@ -1154,7 +1197,7 @@ async function loadResults(code){
   S.res = { code, loading: true }; paintRes();
   try {
     const [exam, key, subs] = await Promise.all([S.be.get('exams', code), S.be.get('keys', code), S.be.list('subs', 'code', code)]);
-    S.res = { code, exam, key, doing: subs.filter(s => s.status !== 'done').length, subs: subs.filter(s => s.status === 'done').sort((a, b) => (b.score - a.score) || (a.submittedAt - b.submittedAt)), sel: null };
+    S.res = { code, exam, key, pending: subs.filter(s => s.status !== 'done'), doing: subs.filter(s => s.status !== 'done').length, subs: subs.filter(s => s.status === 'done').sort((a, b) => (b.score - a.score) || (a.submittedAt - b.submittedAt)), sel: null };
   } catch(e){ S.res = { code, error: e.message || String(e) }; }
   paintRes();
 }
@@ -1168,7 +1211,7 @@ function resAreaHTML(){
   const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
   const head = `<div class="res-head"><div><h3>${esc(E.title)}</h3><p class="hint">Mã đề <strong class="code-inline">${esc(E.code)}</strong>. Giáo viên ${esc(E.teacher)}. ${E.questions.length} câu, ${E.duration} phút, tổng ${fmtNum(max)} điểm. Tạo lúc ${fmtDate(E.createdAt)}.${R.doing ? ` ${R.doing} học sinh chưa nộp.` : ''}</p>
     <div class="flags"><label class="check"><input type="checkbox" data-flag="showScore" ${E.showScore ? 'checked' : ''}><span>Cho học sinh xem điểm</span></label><label class="check"><input type="checkbox" data-flag="showAnswers" ${E.showAnswers ? 'checked' : ''}><span>Cho xem đáp án, lời giải và luyện lại câu sai</span></label></div></div>
-    <div class="row"><button class="btn" data-act="res-load" data-code="${esc(E.code)}">Tải lại</button><button class="btn" data-act="exam-edit" data-code="${esc(E.code)}">Cài đặt đề</button>${subs.length ? `<button class="btn primary" data-act="export">Tải file Excel</button>` : ''}<button class="btn danger" data-act="del-exam" data-code="${esc(E.code)}">Xoá đề</button></div></div>`;
+    <div class="row"><button class="btn" data-act="res-load" data-code="${esc(E.code)}">Tải lại</button><button class="btn" data-act="exam-edit" data-code="${esc(E.code)}">Cài đặt đề</button>${subs.length ? `<button class="btn primary" data-act="export">Tải file Excel</button>` : ''}${lateRes().length ? `<button class="btn" data-act="close-late-res">Chốt ${lateRes().length} bài hết giờ</button>` : ''}<button class="btn danger" data-act="del-exam" data-code="${esc(E.code)}">Xoá đề</button></div></div>`;
   if (!subs.length) return head + `<div class="empty" style="margin-top:14px">Chưa có bài nộp.</div>`;
   const table = `<div class="table-wrap"><table><thead><tr><th class="num">#</th><th>Họ tên</th><th>Bài làm</th><th>Lớp</th><th class="num">Điểm</th><th class="num">Câu đúng</th><th class="num">Vi phạm</th><th>Nộp lúc</th><th class="num">Thời gian làm</th><th>Ghi chú</th><th>Nhận xét</th></tr></thead><tbody>${subs.map((s, i) => `<tr><td class="num">${i + 1}</td><td>${esc(s.name)}</td><td><div class="row nowrap"><button class="btn small" data-act="sub-view" data-id="${esc(s.id)}" aria-label="Xem bài của ${esc(s.name)}">Xem bài</button>${s.device && E.maxLogins > 0 ? `<button class="btn small" data-act="reset-login" data-id="${esc(s.id)}" aria-label="Cấp lại lượt cho ${esc(s.name)}">Cấp lại lượt</button>` : ''}</div></td><td>${esc(s.cls)}</td><td class="num"><strong>${fmtNum(s.score)}</strong></td><td class="num">${s.correct}/${s.total}</td><td class="num">${s.violations || 0}</td><td>${fmtDate(s.submittedAt)}</td><td class="num">${fmtClock((Math.min(s.submittedAt, endOf(s)) - s.startedAt) / 1000)}</td><td>${noteOf(s)}</td><td><button class="btn small" data-act="cmt" data-id="${esc(s.id)}" aria-label="${s.comment ? 'Sửa' : 'Viết'} nhận xét cho ${esc(s.name)}">${s.comment ? 'Sửa' : 'Viết'}</button>${s.comment ? `<span class="cmt-cell" title="${esc(s.comment)}">${esc(s.comment)}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
   return head + `
@@ -1177,7 +1220,20 @@ function resAreaHTML(){
     <h3>Phân tích tổng điểm</h3>${histHTML(scores, max)}
     <h3>Tỉ lệ làm đúng theo câu hỏi</h3><p class="hint">Di chuột, chạm hoặc chọn một cột để xem học sinh làm đúng câu đó. Cột đỏ: dưới 50% làm đúng.</p>${rateHTML(E, subs)}`;
 }
-function noteOf(s){ return s.reason === 'violation' ? 'Vi phạm quá số lần, tự nộp' : s.reason === 'timeout' ? 'Hết giờ, tự nộp' : s.reason === 'locked' ? 'Hết lượt vào lại, tự nộp' : s.reason === 'saved' ? 'Nộp từ bản lưu' : ''; }
+function lateRes(){
+  const R = S.res; if (!R.exam) return [];
+  const now = Date.now();
+  return (R.pending || []).filter(s => now > s.endAt + extraFor(R.exam, s.id) * 60000 + 30000);
+}
+async function closeLateRes(){
+  const late = lateRes(); if (!late.length) return;
+  if (!await modal({ title: 'Chốt bài hết giờ?', body: `Chốt ${late.length} bài của: ${late.map(s => s.name).join(', ')}. Bài được chấm theo phần các em đã làm và đã lưu trên hệ thống.`, ok: 'Chốt bài' })) return;
+  let n = 0;
+  for (const s of late) if (await closeSub(s.id, false, s)) n++;
+  toast(`Đã chốt ${n} bài.`);
+  loadResults(S.res.code);
+}
+function noteOf(s){ if (s.closedBy === 'teacher') return 'Hết giờ, giáo viên chốt bài'; return s.reason === 'violation' ? 'Vi phạm quá số lần, tự nộp' : s.reason === 'timeout' ? 'Hết giờ, tự nộp' : s.reason === 'locked' ? 'Hết lượt vào lại, tự nộp' : s.reason === 'saved' ? 'Nộp từ bản lưu' : ''; }
 function histHTML(scores, max){
   const bins = Array(10).fill(0);
   scores.forEach(s => { let i = max > 0 ? Math.floor(s / max * 10) : 0; bins[Math.min(9, Math.max(0, i))]++; });
@@ -1501,7 +1557,9 @@ function onAway(){
   x.awayEntry = logV('away');
 }
 function onBack(){
-  const x = S.x; if (S.view !== 'exam' || !x || !x.away) return;
+  const x = S.x; if (S.view !== 'exam' || !x) return;
+  xTick();
+  if (!x.away || x.submitting) return;
   x.away = false;
   const d = Math.round((Date.now() - (x.awayAt || Date.now())) / 1000);
   if (x.awayEntry){ x.awayEntry.d = d; x.awayEntry = null; saveSess(x.sess); pushSub(true); }
@@ -2767,6 +2825,9 @@ document.addEventListener('click', async e => {
     case 'bank-reload': loadBank(); break;
     case 'fs-enter': enterFS(); break;
     case 'vlog': showVlog(el.dataset.id); break;
+    case 'close-sub': closeSub(el.dataset.id, true); break;
+    case 'close-late': closeAllLate(); break;
+    case 'close-late-res': closeLateRes(); break;
     case 'bank-view': bankView(el.dataset.id); break;
     case 'bank-replace': replaceQuestion(el.dataset.id); break;
     case 'ps-reset-time': resetSetTime(el.dataset.set, el.dataset.id); break;
@@ -2808,6 +2869,7 @@ document.addEventListener('change', e => {
   if (t.id === 'bk-open' || t.id === 'bk-close'){ S.bank[t.id === 'bk-open' ? 'open' : 'close'] = t.value; return; }
   if (t.id === 'bk-dur'){ S.bank.dur = t.value; return; }
   if (t.name === 'ps-code'){ const c = $('#ps-count'); if (c) c.textContent = $$('input[name="ps-code"]:checked').length; return; }
+  if (t.id === 'live-auto'){ S.live.auto = t.checked; if (t.checked) autoCloseLate(); return; }
   if (t.id === 'p-only'){ S.h.onlyNew = t.checked; S.h.pick = 'all'; paintMine(); return; }
   if (t.id === 'p-pick'){ S.h.pick = t.value; return; }
   if (t.id === 'f-excel'){ S.draft.excelFile = t.files[0] || null; $('#f-excel-name').textContent = S.draft.excelFile ? S.draft.excelFile.name : 'Chưa chọn file'; return; }
@@ -2832,7 +2894,8 @@ document.addEventListener('keydown', e => {
 document.addEventListener('mouseover', e => { const c = e.target.closest('.qcol'); if (c && $('#rate-detail')) $('#rate-detail').innerHTML = rateDetail(+c.dataset.i); });
 document.addEventListener('focusin', e => { const c = e.target.closest && e.target.closest('.qcol'); if (c && $('#rate-detail')) $('#rate-detail').innerHTML = rateDetail(+c.dataset.i); });
 document.addEventListener('mouseout', e => { const ch = e.target.closest && e.target.closest('#rate-chart'); if (ch && !ch.contains(e.relatedTarget) && $('#rate-detail')) $('#rate-detail').innerHTML = rateDetail(S.res.sel); });
-document.addEventListener('visibilitychange', () => document.hidden ? onAway() : onBack());
+document.addEventListener('visibilitychange', () => { if (document.hidden) onAway(); else { xTick(); onBack(); } });
+setInterval(() => { if (S.view === 'exam') xTick(); }, 5000);
 window.addEventListener('blur', onAway);
 document.addEventListener('fullscreenchange', onFS);
 document.addEventListener('webkitfullscreenchange', onFS);
