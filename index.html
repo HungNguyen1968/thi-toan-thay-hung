@@ -657,7 +657,7 @@ function parseSheet(ab){
 function newDraft(){
   return { teacher: LS.get('tt_teacher') || '', title: '', duration: 90, maxLogins: 1, preventReload: true, openAt: '', closeAt: '',
     showAnswers: true, showScore: true, scoring: { mc: 0.25, sa: 0.5, tf1: 0.1, tf2: 0.25, tf3: 0.5, tf4: 1 },
-    questions: [], excelFile: null, imageFiles: [], showErrors: false, maxViol: 0, fullscreen: false };
+    questions: [], excelFile: null, imageFiles: [], showErrors: false, fullscreen: false };
 }
 const S = {
   be: null, view: 'boot', role: null, teacher: false, ttab: 'create', draft: newDraft(), exams: [],
@@ -709,7 +709,7 @@ function topbarHTML(){
   const brand = `<div class="brand"><span class="brand-mark" aria-hidden="true"></span><span class="brand-t">Thi Toán Online</span></div>`;
   if (S.view === 'exam' && S.x){
     const s = S.x.sess;
-    return `${brand}<div class="xbar"><span class="xwho">Thí sinh: <strong>${esc(s.name)}</strong></span>${s.preview ? '<span class="role-chip">Xem thử</span>' : `<span class="xvio ${s.violations ? 'bad' : ''}" id="xvio">Vi phạm: ${s.violations}${S.x.exam.maxViol ? '/' + S.x.exam.maxViol : ''}</span>`}<span class="timer" id="xtimer" role="timer" aria-label="Thời gian còn lại">--:--</span><button class="btn primary small" data-act="submit">Nộp bài</button></div>`;
+    return `${brand}<div class="xbar"><span class="xwho">Thí sinh: <strong>${esc(s.name)}</strong></span>${s.preview ? '<span class="role-chip">Xem thử</span>' : `<span class="xvio ${s.violations ? 'bad' : ''}" id="xvio">Vi phạm: ${s.violations}</span>`}<span class="timer" id="xtimer" role="timer" aria-label="Thời gian còn lại">--:--</span><button class="btn primary small" data-act="submit">Nộp bài</button></div>`;
   }
   const role = S.role === 'teacher' ? 'Giáo viên' : S.role === 'student' ? 'Học sinh' : '';
   return `${brand}<div class="row nowrap">${role ? `<span class="role-chip">${role}</span><button class="btn small ghost" data-act="home">Đổi vai trò</button>` : ''}</div>`;
@@ -777,10 +777,10 @@ async function openTeacher(){
 
 /* ---------------- giáo viên ---------------- */
 function teacherView(){
-  const tabs = [['create', 'Tạo đề'], ['manage', 'Quản lý đề'], ['live', 'Theo dõi trực tiếp'], ['results', 'Kết quả'], ['bank', 'Kho câu sai'], ['psets', 'Bài luyện tập'], ['preview', 'Xem như học sinh']];
+  const tabs = [['create', 'Tạo đề'], ['manage', 'Quản lý đề'], ['live', 'Theo dõi trực tiếp'], ['results', 'Kết quả'], ['roster', 'Học sinh'], ['bank', 'Kho câu sai'], ['psets', 'Bài luyện tập'], ['preview', 'Xem như học sinh']];
   return `<div class="wrap">${modeNotice()}<nav class="subtabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" class="subtab" aria-selected="${S.ttab === k}" data-act="ttab" data-k="${k}">${l}</button>`).join('')}</nav><div id="tpanel">${tpanelHTML()}</div></div>`;
 }
-const tpanelHTML = () => S.ttab === 'create' ? createTab() : S.ttab === 'live' ? liveTab() : S.ttab === 'preview' ? previewTab() : S.ttab === 'manage' ? manageTab() : S.ttab === 'psets' ? psetTab() : S.ttab === 'bank' ? bankTab() : resultsTab();
+const tpanelHTML = () => S.ttab === 'create' ? createTab() : S.ttab === 'live' ? liveTab() : S.ttab === 'preview' ? previewTab() : S.ttab === 'manage' ? manageTab() : S.ttab === 'psets' ? psetTab() : S.ttab === 'bank' ? bankTab() : S.ttab === 'roster' ? rosterTab() : resultsTab();
 function manageTab(){
   if (!S.exams.length) return `<section class="block"><h2>Quản lý đề</h2><div class="empty">Chưa có đề nào. Tạo đề ở mục “Tạo đề”.</div></section>`;
   const now = Date.now();
@@ -801,7 +801,6 @@ async function editExam(code){
       <label class="field">Số lượt vào thi mỗi thiết bị<input class="input" type="number" min="0" max="99" id="es-max" value="${E0.maxLogins}"><span class="hint">0 là không giới hạn</span></label>
       <label class="field">Mở đề (để trống nếu mở ngay)<input class="input" type="datetime-local" id="es-open" value="${toLocalInput(E0.openAt)}"></label>
       <label class="field">Đóng đề (để trống nếu không đóng)<input class="input" type="datetime-local" id="es-close" value="${toLocalInput(E0.closeAt)}"></label>
-      <label class="field">Tự nộp bài khi vi phạm quá (lần)<input class="input" type="number" min="0" max="99" id="es-viol" value="${+E0.maxViol || 0}"><span class="hint">0 là chỉ ghi nhận, không tự nộp</span></label>
     </div>
     <div class="checks" style="margin:14px 0 10px">
       ${chk('es-prevent', E0.preventReload, 'Mỗi lần vào lại bài đang làm tính thêm một lượt')}
@@ -810,7 +809,7 @@ async function editExam(code){
       ${chk('es-fs', E0.fullscreen, 'Bắt buộc làm bài ở chế độ toàn màn hình')}
       ${chk('es-reset', false, '<strong>Cấp lại lượt vào thi cho tất cả thiết bị</strong> (học sinh đã hết lượt được vào thi lại)')}
     </div>
-    <p class="hint">Số lần vi phạm tối đa và yêu cầu toàn màn hình áp dụng ngay cả với em đang làm bài. Thời gian làm bài mới áp dụng cho lượt vào thi bắt đầu sau khi lưu. Muốn cộng giờ cho em đang làm, dùng nút “+ Thêm giờ” ở mục Theo dõi trực tiếp.</p>`;
+    <p class="hint">Yêu cầu toàn màn hình áp dụng ngay cả với em đang làm bài. Thời gian làm bài mới áp dụng cho lượt vào thi bắt đầu sau khi lưu. Muốn cộng giờ cho em đang làm, dùng nút “+ Thêm giờ” ở mục Theo dõi trực tiếp.</p>`;
   let saved = null;
   const ok = await modal({
     title: `Cài đặt đề ${code}`, html, wide: true, ok: 'Lưu cài đặt',
@@ -822,11 +821,9 @@ async function editExam(code){
       if (maxL === '' || isNaN(+maxL) || +maxL < 0) return 'Số lượt phải là số từ 0 trở lên.';
       const openAt = openV ? new Date(openV).getTime() : null, closeAt = closeV ? new Date(closeV).getTime() : null;
       if (openAt && closeAt && closeAt <= openAt) return 'Giờ đóng đề phải sau giờ mở đề.';
-      const mv = $('#es-viol').value.trim();
-      if (mv === '' || isNaN(+mv) || +mv < 0 || +mv > 99) return 'Số lần vi phạm tối đa từ 0 đến 99.';
       try {
         const E = await S.be.get('exams', code); if (!E) return 'Không tìm thấy đề, có thể đã bị xoá.';
-        Object.assign(E, { title, duration: dur, maxLogins: Math.round(+maxL), openAt, closeAt, preventReload: $('#es-prevent').checked, showScore: $('#es-score').checked, showAnswers: $('#es-ans').checked, maxViol: Math.round(+mv), fullscreen: $('#es-fs').checked });
+        Object.assign(E, { title, duration: dur, maxLogins: Math.round(+maxL), openAt, closeAt, preventReload: $('#es-prevent').checked, showScore: $('#es-score').checked, showAnswers: $('#es-ans').checked, maxViol: 0, fullscreen: $('#es-fs').checked });
         if ($('#es-reset').checked) E.resetAll = (+E.resetAll || 0) + 1;
         await S.be.set('exams', code, E); replaceExam(E); saved = E;
       } catch(e){ return 'Không lưu được: ' + (e.message || e); }
@@ -863,6 +860,148 @@ function viewSub(id){
   S.done = { exam: R.exam, state: 'sent', g: grade(R.exam, key, sub.answers || {}), key, doc: sub, reason: sub.reason || 'past', teacher: true };
   go('result');
 }
+async function loadRoster(force){
+  if (S.roster && !force) return S.roster;
+  if (!S.rosterP || force){
+    S.rosterP = S.be.get('roster', 'main').then(doc => {
+      S.roster = { enforce: !!(doc && doc.enforce), requirePin: !!(doc && doc.requirePin), students: ((doc && doc.students) || []).map(x => ({ key: x.key || normName(x.name), name: x.name, cls: x.cls || '', pin: String(x.pin || '') })).sort((a, b) => (a.cls || '').localeCompare(b.cls || '', 'vi') || a.name.localeCompare(b.name, 'vi')) };
+      return S.roster;
+    }).catch(() => { S.roster = S.roster || { enforce: false, students: [], error: true }; return S.roster; });
+  }
+  const r = await S.rosterP;
+  if (S.view === 'teacher' && S.ttab === 'roster') $('#tpanel').innerHTML = rosterTab();
+  return r;
+}
+async function saveRoster(next){
+  await S.be.set('roster', 'main', { enforce: !!next.enforce, requirePin: !!next.requirePin, students: next.students.map(x => ({ key: x.key, name: x.name, cls: x.cls || '', pin: String(x.pin || '') })), updatedAt: Date.now() });
+  S.roster = next; S.rosterP = Promise.resolve(next);
+}
+const rosterOf = name => { const r = S.roster; if (!r) return null; const k = normName(name); return r.students.find(x => x.key === k) || null; };
+const rosterOn = () => !!(S.roster && S.roster.enforce && S.roster.students.length);
+const pinOn = () => !!(rosterOn() && S.roster.requirePin);
+const newPin = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 10000).padStart(4, '0');
+function pinField(id, entry){
+  if (!pinOn()) return '';
+  const saved = entry ? LS.get('tt_pin_' + entry.key) || '' : '';
+  const wide = id === 'st-pin';
+  return `<label class="field" style="${wide ? '' : 'flex:0 0 120px'}">Mã cá nhân<input class="input" id="${id}" inputmode="numeric" maxlength="4" autocomplete="off" value="${esc(saved)}" placeholder="4 số">${wide ? '<span class="hint">Mã 4 số thầy cô cấp riêng cho em.</span>' : ''}</label>`;
+}
+function pinErr(entry, nameId){
+  if (!pinOn()) return '';
+  if (!entry) return 'Tên này chưa có trong danh sách lớp.';
+  const el = $('#' + String(nameId).replace('-name', '-pin'));
+  const v = (el ? el.value : '').trim();
+  if (!/^\d{4}$/.test(v)) return 'Nhập mã cá nhân 4 số thầy cô đã cấp.';
+  if (v !== String(entry.pin || '')) return 'Mã cá nhân không đúng. Hỏi lại thầy cô nếu em quên mã.';
+  LS.set('tt_pin_' + entry.key, v);
+  return '';
+}
+function nameField(id, current, label){
+  const r = S.roster;
+  if (!rosterOn()) return `<label class="field">${label}<input class="input" id="${id}" autocomplete="name" value="${esc(current || '')}"></label>`;
+  const cur = rosterOf(current);
+  return `<label class="field">${label}<select class="input" id="${id}"><option value="">— Chọn tên em —</option>${r.students.map(x => `<option value="${esc(x.name)}" ${cur && cur.key === x.key ? 'selected' : ''}>${esc(x.name)}${x.cls ? ` (${esc(x.cls)})` : ''}</option>`).join('')}</select><span class="hint">Không thấy tên mình thì báo thầy cô thêm vào danh sách lớp.</span></label>`;
+}
+function rosterTab(){
+  const r = S.roster;
+  if (!r) return `<section class="block"><h2>Danh sách học sinh</h2><p class="hint" role="status">Đang tải danh sách…</p></section>`;
+  return `<section class="block"><h2>Danh sách học sinh</h2>
+    <p class="hint" style="margin-bottom:12px">Khi bật kiểm tra, học sinh phải chọn tên trong danh sách này mới vào thi được, nên không còn chuyện gõ sai tên hay mỗi lần gõ một kiểu. Kết quả và kho câu sai nhờ đó gom đúng về từng em.</p>
+    <div class="checks" style="margin:0 0 4px">
+      <label class="check"><input type="checkbox" id="ros-on" ${r.enforce ? 'checked' : ''}><span><strong>Chỉ cho học sinh trong danh sách vào thi</strong>${r.students.length ? '' : ' (cần thêm ít nhất một em)'}</span></label>
+      <label class="check"><input type="checkbox" id="ros-pin" ${r.requirePin ? 'checked' : ''}><span><strong>Yêu cầu mã cá nhân 4 số</strong> khi vào thi, để em này không vào được bằng tên em kia. Thầy cô phát mã riêng cho từng em.</span></label>
+    </div>
+    <div class="form-grid" style="margin-top:16px">
+      <label class="field">Họ và tên<input class="input" id="ros-name" autocomplete="off" placeholder="VD: Trần Văn Nam"></label>
+      <label class="field">Lớp<input class="input" id="ros-cls" autocomplete="off" placeholder="VD: 12A1"></label>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="btn primary" data-act="ros-add">Thêm học sinh</button><button class="btn" data-act="ros-paste">Thêm nhiều em cùng lúc</button><button class="btn" data-act="ros-import">Lấy tên từ các bài đã nộp</button><button class="btn" data-act="ros-xls">Tải danh sách kèm mã</button><span id="ros-msg" class="hint" role="status"></span></div>
+    <h3>Danh sách (${r.students.length} em)</h3>
+    ${r.students.length ? `<div class="table-wrap"><table><thead><tr><th class="num">#</th><th>Họ và tên</th><th>Lớp</th><th>Mã cá nhân</th><th></th></tr></thead><tbody>${r.students.map((x, i) => `<tr><td class="num">${i + 1}</td><td>${esc(x.name)}</td><td>${esc(x.cls)}</td><td><strong class="code-inline">${esc(x.pin || '—')}</strong></td><td><div class="row nowrap"><button class="btn small" data-act="ros-pin-new" data-key="${esc(x.key)}">Cấp mã mới</button><button class="btn small" data-act="ros-edit" data-key="${esc(x.key)}">Sửa</button><button class="btn small danger" data-act="ros-del" data-key="${esc(x.key)}">Xoá</button></div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">Chưa có em nào trong danh sách.</div>'}
+  </section>`;
+}
+async function rosterSet(students, enforce, msg, requirePin){
+  const next = { enforce: enforce != null ? enforce : S.roster.enforce, requirePin: requirePin != null ? requirePin : S.roster.requirePin, students: students.sort((a, b) => (a.cls || '').localeCompare(b.cls || '', 'vi') || a.name.localeCompare(b.name, 'vi')) };
+  try { await saveRoster(next); if (msg) toast(msg); }
+  catch(e){ toast('Không lưu được danh sách: ' + (e.message || e), 'err'); }
+  if (S.view === 'teacher' && S.ttab === 'roster') $('#tpanel').innerHTML = rosterTab();
+}
+function rosterAdd(){
+  const nEl = $('#ros-name'), cEl = $('#ros-cls'), msg = $('#ros-msg');
+  const name = nEl.value.trim().replace(/\s+/g, ' '), cls = cEl.value.trim();
+  const key = normName(name);
+  if (!key){ msg.innerHTML = errSpan('Nhập họ tên học sinh.'); nEl.focus(); return; }
+  if (S.roster.students.some(x => x.key === key)){ msg.innerHTML = errSpan(`${name} đã có trong danh sách.`); return; }
+  nEl.value = ''; msg.textContent = '';
+  rosterSet([...S.roster.students, { key, name, cls, pin: newPin() }], null, `Đã thêm ${name}.`);
+}
+async function rosterPaste(){
+  const v = await modal({ title: 'Thêm nhiều học sinh', input: 'textarea', wide: true, ok: 'Thêm vào danh sách',
+    body: 'Mỗi dòng một em. Có thể ghi thêm lớp sau dấu phẩy, VD: Trần Văn Nam, 12A1', placeholder: 'Trần Văn Nam, 12A1\nLê Thị Hoa, 12A1' });
+  if (v == null) return;
+  const cur = [...S.roster.students]; let added = 0, dup = 0;
+  v.split('\n').forEach(line => {
+    const parts = line.split(/[,;\t]|\s-\s/);
+    const name = (parts[0] || '').trim().replace(/\s+/g, ' '), cls = (parts[1] || '').trim();
+    const key = normName(name); if (!key) return;
+    if (cur.some(x => x.key === key)){ dup++; return; }
+    cur.push({ key, name, cls, pin: newPin() }); added++;
+  });
+  if (!added){ toast(dup ? 'Các em này đã có trong danh sách.' : 'Không đọc được tên nào.', 'err'); return; }
+  rosterSet(cur, null, `Đã thêm ${added} em${dup ? `, bỏ qua ${dup} em đã có` : ''}.`);
+}
+async function rosterImport(){
+  toast('Đang lấy tên từ các bài đã nộp…');
+  let subs = [];
+  try { subs = await S.be.list('subs'); } catch(e){ toast('Không tải được bài nộp.', 'err'); return; }
+  const cur = [...S.roster.students]; let added = 0;
+  subs.filter(x => x.status === 'done').sort((a, b) => a.submittedAt - b.submittedAt).forEach(x => {
+    const key = x.nameKey || normName(x.name); if (!key) return;
+    const at = cur.find(y => y.key === key);
+    if (at){ if (!at.cls && x.cls) at.cls = x.cls; return; }
+    cur.push({ key, name: x.name, cls: x.cls || '', pin: newPin() }); added++;
+  });
+  if (!added){ toast('Không có tên mới nào từ bài đã nộp.'); return; }
+  rosterSet(cur, null, `Đã thêm ${added} em từ bài đã nộp.`);
+}
+async function rosterEdit(key){
+  const x = S.roster.students.find(y => y.key === key); if (!x) return;
+  const html = `<div class="es-grid"><label class="field full">Họ và tên<input class="input" id="re-name" value="${esc(x.name)}"></label><label class="field">Lớp<input class="input" id="re-cls" value="${esc(x.cls)}"></label><label class="field">Mã cá nhân (4 số)<input class="input" id="re-pin" inputmode="numeric" maxlength="4" value="${esc(x.pin || '')}"></label></div><p class="hint" style="margin-top:10px">Đổi tên ở đây không đổi tên trên các bài em đã nộp trước đó.</p>`;
+  const ok = await modal({ title: 'Sửa học sinh', html, wide: true, ok: 'Lưu',
+    validate: async () => {
+      const name = $('#re-name').value.trim().replace(/\s+/g, ' '), cls = $('#re-cls').value.trim();
+      const k = normName(name); if (!k) return 'Nhập họ tên.';
+      if (k !== key && S.roster.students.some(y => y.key === k)) return 'Tên này đã có trong danh sách.';
+      const pin = $('#re-pin').value.trim();
+      if (pin && !/^\d{4}$/.test(pin)) return 'Mã cá nhân phải là 4 chữ số.';
+      x.name = name; x.cls = cls; x.key = k; x.pin = pin;
+      return '';
+    } });
+  if (ok) rosterSet([...S.roster.students], null, 'Đã lưu.');
+}
+async function rosterNewPin(key){
+  const x = S.roster.students.find(y => y.key === key); if (!x) return;
+  if (!await modal({ title: 'Cấp mã mới?', body: `${x.name} sẽ có mã mới, mã cũ không dùng được nữa. Nhớ báo lại mã mới cho em.`, ok: 'Cấp mã mới' })) return;
+  x.pin = newPin();
+  LS.del('tt_pin_' + key);
+  await rosterSet([...S.roster.students], null, `Mã mới của ${x.name}: ${x.pin}`);
+}
+async function rosterExport(){
+  const r = S.roster;
+  if (!r.students.length){ toast('Danh sách chưa có em nào.', 'err'); return; }
+  if (!window.XLSX){ toast('Không tải được thư viện Excel. Kiểm tra mạng rồi tải lại trang.', 'err'); return; }
+  const rows = [['STT', 'Họ và tên', 'Lớp', 'Mã cá nhân'], ...r.students.map((x, i) => [i + 1, x.name, x.cls || '', String(x.pin || '')])];
+  const ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = [{ wch: 6 }, { wch: 26 }, { wch: 10 }, { wch: 14 }];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Danh sách lớp');
+  const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  try { await S.be.save('Danh_sach_lop.xlsx', new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); }
+  catch(e){ if (!(e && e.code === 'declined')) toast('Không tải được file: ' + ((e && (e.message || e.code)) || e), 'err'); }
+}
+async function rosterDel(key){
+  const x = S.roster.students.find(y => y.key === key); if (!x) return;
+  if (!await modal({ title: 'Xoá khỏi danh sách?', body: `Xoá ${x.name} khỏi danh sách lớp. Bài em đã nộp và điểm vẫn giữ nguyên.`, ok: 'Xoá', kind: 'danger' })) return;
+  rosterSet(S.roster.students.filter(y => y.key !== key), null, `Đã xoá ${x.name}.`);
+}
 async function loadExams(){
   try { S.exams = (await S.be.list('exams')).sort((a, b) => b.createdAt - a.createdAt); }
   catch(e){ S.exams = []; toast('Không tải được danh sách đề.', 'err'); }
@@ -894,9 +1033,7 @@ function createTab(){
       <label class="check"><input type="checkbox" data-d="showScore" ${d.showScore ? 'checked' : ''}><span>Cho học sinh xem điểm sau khi nộp</span></label>
       <label class="check"><input type="checkbox" data-d="fullscreen" ${d.fullscreen ? 'checked' : ''}><span>Bắt buộc làm bài ở chế độ toàn màn hình (máy tính và Android; iPhone không hỗ trợ nên tự bỏ qua). Thoát toàn màn hình bị tính vi phạm.</span></label>
     </div>
-    <div class="form-grid" style="margin-top:14px">
-      <label class="field">Tự nộp bài khi vi phạm quá (lần)<input class="input" type="number" min="0" max="99" data-d="maxViol" value="${esc(d.maxViol)}"><span class="hint">Nhập 0 nếu chỉ ghi nhận, không tự nộp. VD: nhập 3 thì lần vi phạm thứ 4 bài bị nộp.</span></label>
-    </div>
+
     <h3>Điểm mỗi câu</h3>
     <div class="score-grid">${scoreFields.map(([k, l]) => `<label class="field">${l}<input class="input" type="number" step="0.05" min="0" data-sc="${k}" value="${esc(sc[k])}"></label>`).join('')}</div>
   </section>
@@ -1004,7 +1141,6 @@ async function publish(){
   if (dup.size) problems.push(`Trùng số câu: ${[...dup].join(', ')}.`);
   if (d.openAt && d.closeAt && new Date(d.closeAt) <= new Date(d.openAt)) problems.push('Giờ đóng đề phải sau giờ mở đề.');
   if (Object.values(d.scoring).some(v => v === '' || isNaN(+v) || +v < 0)) problems.push('Điểm mỗi câu phải là số không âm.');
-  if (String(d.maxViol).trim() === '' || isNaN(+d.maxViol) || +d.maxViol < 0 || +d.maxViol > 99) problems.push('Số lần vi phạm tối đa từ 0 đến 99.');
   if (problems.length){ d.showErrors = true; refreshQList(); msg.innerHTML = errSpan(problems.join(' ')); return; }
   const noImg = d.questions.filter(q => !q.qImgs.length).map(q => q.n);
   if (noImg.length && !await modal({ title: 'Thiếu ảnh câu hỏi', body: `Câu ${noImg.join(', ')} chưa có ảnh câu hỏi. Vẫn tạo đề?`, ok: 'Vẫn tạo đề' })) return;
@@ -1029,7 +1165,7 @@ async function publish(){
       maxLogins: Math.max(0, Math.round(+d.maxLogins || 0)), preventReload: !!d.preventReload,
       openAt: d.openAt ? new Date(d.openAt).getTime() : null, closeAt: d.closeAt ? new Date(d.closeAt).getTime() : null,
       showAnswers: !!d.showAnswers, showScore: !!d.showScore,
-      maxViol: Math.round(+d.maxViol || 0), fullscreen: !!d.fullscreen,
+      maxViol: 0, fullscreen: !!d.fullscreen,
       scoring: { mc: +sc.mc, sa: +sc.sa, tf: [0, +sc.tf1, +sc.tf2, +sc.tf3, +sc.tf4] },
       createdAt: Date.now(), questions
     };
@@ -1332,7 +1468,7 @@ function studentView(){
     <div class="panel">
       <p class="hint" style="margin-bottom:12px">Nhập họ tên giống lúc vào thi để xem điểm, nhận xét của thầy cô và luyện lại các câu đã làm sai.</p>
       <label class="field" for="h-name">Họ và tên</label>
-      <div class="row nowrap" style="margin-top:6px"><input class="input" id="h-name" autocomplete="name" value="${esc(S.h.name || me.name || '')}"><button class="btn" data-act="h-load">Xem bài đã làm</button></div>
+      <div class="row nowrap" style="margin-top:6px">${rosterOn() ? nameField('h-name', S.h.name || me.name, '').replace('<label class="field">', '<label class="field" style="flex:1">') : `<input class="input" id="h-name" autocomplete="name" value="${esc(S.h.name || me.name || '')}">`}${pinField('h-pin', rosterOf(S.h.name || me.name))}<button class="btn" data-act="h-load">Xem bài đã làm</button></div>
       <div id="h-area">${mineHTML()}</div>
     </div></div>`;
 }
@@ -1343,7 +1479,7 @@ function setInfoHTML(st){
     ${st.openAt ? `<div><dt>Mở lúc</dt><dd>${fmtDate(st.openAt)}</dd></div>` : ''}${st.closeAt ? `<div><dt>Đóng lúc</dt><dd>${fmtDate(st.closeAt)}</dd></div>` : ''}</dl>`;
   const block = stt === 'wait' ? `<div class="notice">Bài luyện tập mở lúc ${fmtDate(st.openAt)}. Em quay lại sau giờ này nhé.</div>`
     : stt === 'closed' ? `<div class="notice bad">Bài luyện tập đã đóng lúc ${fmtDate(st.closeAt)}.</div>`
-    : `<div class="form-grid two"><label class="field">Họ và tên<input class="input" id="ps-name" autocomplete="name" value="${esc(S.h.name || me.name || '')}"></label></div>
+    : `<div class="form-grid two">${nameField('ps-name', S.h.name || me.name, 'Họ và tên')}</div>
       <div id="ps-err" class="error" role="alert" style="margin-bottom:8px"></div>
       <button class="btn primary big wide" data-act="ps-enter" data-id="${esc(st.id)}">Vào làm bài luyện tập</button>
       <p class="hint" style="margin-top:10px">Nhập họ tên giống lúc vào thi. Bài luyện tập không tính điểm, mỗi câu làm xong được xem đáp án và lời giải ngay.</p>`;
@@ -1353,7 +1489,10 @@ async function enterSetByCode(id){
   const st = S.st.pset; if (!st) return;
   const inp = $('#ps-name'), err = $('#ps-err');
   const name = inp.value.trim().replace(/\s+/g, ' ');
-  if (!normName(name)){ err.textContent = 'Nhập họ và tên để vào làm bài.'; inp.focus(); return; }
+  if (!normName(name)){ err.textContent = rosterOn() ? 'Chọn tên em trong danh sách.' : 'Nhập họ và tên để vào làm bài.'; inp.focus(); return; }
+  await loadRoster(true);
+  if (rosterOn() && !rosterOf(name)){ err.textContent = 'Tên này chưa có trong danh sách lớp. Báo thầy cô thêm vào danh sách.'; return; }
+  { const pe = pinErr(rosterOf(name), 'ps-name'); if (pe){ err.textContent = pe; const el = $('#ps-pin'); if (el) el.focus(); return; } }
   err.textContent = ''; const btn = $('[data-act="ps-enter"]'); btn.disabled = true; btn.textContent = 'Đang tải bài…';
   try {
     await loadMine(name);
@@ -1388,10 +1527,10 @@ function examInfoHTML(E){
     const g = gate(E), me = LS.getJSON('tt_student') || {};
     action = `${done ? `<div class="notice">Thiết bị này đã nộp bài đề này lúc ${fmtDate(done.at)}.${E.showScore || E.showAnswers ? ` <button class="linkbtn" data-act="view-past">Xem lại bài đã nộp</button>` : ''}</div>` : ''}
       ${g ? `<div class="notice bad">${esc(g)}</div>` : `
-      <div class="form-grid two"><label class="field">Họ và tên<input class="input" id="st-name" autocomplete="name" value="${esc(me.name || '')}"></label><label class="field">Lớp<input class="input" id="st-cls" value="${esc(me.cls || '')}"></label></div>
+      <div class="form-grid two">${nameField('st-name', me.name, 'Họ và tên')}${pinField('st-pin', rosterOf(me.name))}${rosterOn() ? '' : `<label class="field">Lớp<input class="input" id="st-cls" value="${esc(me.cls || '')}"></label>`}</div>
       <div id="st-err" class="error" role="alert" style="margin-bottom:8px"></div>
       <button class="btn primary big wide" data-act="begin">Bắt đầu làm bài</button>
-      <p class="hint" style="margin-top:10px">Đồng hồ chạy ngay khi bấm. Mỗi lần rời khỏi trang làm bài (chuyển tab, mở ứng dụng khác, thu nhỏ cửa sổ) hoặc bấm phím chụp màn hình đều bị ghi nhận là vi phạm.${E.fullscreen ? ' Đề yêu cầu làm bài ở chế độ toàn màn hình.' : ''}${E.maxViol ? ` Vi phạm quá ${E.maxViol} lần bài sẽ bị tự động nộp.` : ''}${E.maxLogins > 0 ? ` Thiết bị này còn ${E.maxLogins - used} lượt vào thi.` : ''}</p>`}`;
+      <p class="hint" style="margin-top:10px">Đồng hồ chạy ngay khi bấm. Mỗi lần rời khỏi trang làm bài (chuyển tab, mở ứng dụng khác, thu nhỏ cửa sổ) hoặc bấm phím chụp màn hình đều bị ghi nhận là vi phạm.${E.fullscreen ? ' Đề yêu cầu làm bài ở chế độ toàn màn hình.' : ''} Bài chỉ tự nộp khi hết giờ.${E.maxLogins > 0 ? ` Thiết bị này còn ${E.maxLogins - used} lượt vào thi.` : ''}</p>`}`;
   }
   return `<div class="exam-info"><h2>${esc(E.title)}</h2>
     <dl class="facts"><div><dt>Giáo viên</dt><dd>${esc(E.teacher)}</dd></div><div><dt>Thời gian</dt><dd>${E.duration} phút</dd></div><div><dt>Số câu</dt><dd>${E.questions.length} (${typeSummary(E)})</dd></div>${E.openAt ? `<div><dt>Mở đề</dt><dd>${fmtDate(E.openAt)}</dd></div>` : ''}${E.closeAt ? `<div><dt>Đóng đề</dt><dd>${fmtDate(E.closeAt)}</dd></div>` : ''}</dl>
@@ -1405,6 +1544,7 @@ async function checkCode(){
   try {
     const [E, P] = await Promise.all([S.be.get('exams', code), S.be.get('psets', code)]);
     const keep = { n: $('#st-name') && $('#st-name').value, c: $('#st-cls') && $('#st-cls').value, h: $('#h-name') && $('#h-name').value };
+    await loadRoster(true);
     S.st = { code, exam: E, pset: E ? null : P };
     render();
     if (keep.n && $('#st-name')) $('#st-name').value = keep.n;
@@ -1417,9 +1557,14 @@ async function checkCode(){
 const subDoc = (s, E) => ({ vlog: s.vlog || [], multi: !!(s.flags && s.flags.multi), awayNow: !!(S.x && S.x.sess === s && (S.x.away || S.x.fsEntry)), code: s.code, name: s.name, nameKey: normName(s.name), cls: s.cls, status: 'doing', answers: s.answers, answered: countAnswered(E, s.answers), total: E.questions.length, violations: s.violations, startedAt: s.startedAt, endAt: s.endAt, extraMin: +s.extraMin || 0, updatedAt: Date.now(), device: s.device });
 async function begin(){
   const E = S.st.exam; if (!E) return;
-  const name = $('#st-name').value.trim().replace(/\s+/g, ' '), cls = $('#st-cls').value.trim();
+  const name = $('#st-name').value.trim().replace(/\s+/g, ' ');
   const err = $('#st-err');
-  if (!name){ err.textContent = 'Nhập họ và tên để bắt đầu.'; $('#st-name').focus(); return; }
+  if (!name){ err.textContent = rosterOn() ? 'Chọn tên em trong danh sách để bắt đầu.' : 'Nhập họ và tên để bắt đầu.'; $('#st-name').focus(); return; }
+  await loadRoster(true);
+  const inList = rosterOf(name);
+  if (rosterOn() && !inList){ err.textContent = 'Tên này chưa có trong danh sách lớp. Chọn lại tên hoặc báo thầy cô thêm vào danh sách.'; return; }
+  { const pe = pinErr(inList, 'st-name'); if (pe){ err.textContent = pe; const el = $('#st-pin'); if (el) el.focus(); return; } }
+  const cls = inList && inList.cls ? inList.cls : ($('#st-cls') ? $('#st-cls').value.trim() : '');
   let fresh = E;
   try { fresh = await S.be.get('exams', E.code) || E; } catch(e){}
   const g = gate(fresh); if (g){ err.textContent = g; return; }
@@ -1456,10 +1601,9 @@ function enterExam(E, sess){
     const x = S.x;
     x.unwatch = S.be.watch('exams', 'code', E.code, list => {
       const fresh = list[0]; if (!fresh || S.x !== x || x.submitting) return;
-      if ((+fresh.maxViol || 0) !== (+x.exam.maxViol || 0) || !!fresh.fullscreen !== !!x.exam.fullscreen){
-        x.exam = { ...x.exam, maxViol: +fresh.maxViol || 0, fullscreen: !!fresh.fullscreen };
+      if (!!fresh.fullscreen !== !!x.exam.fullscreen){
+        x.exam = { ...x.exam, fullscreen: !!fresh.fullscreen };
         updateVio(); paintFS();
-        const lim = x.exam.maxViol; if (lim && sess.violations > lim){ finalize(x.exam, sess, 'violation'); return; }
       }
       const m = extraFor(fresh, sess.subId), old = +sess.extraMin || 0;
       if (m === old) return;
@@ -1531,7 +1675,7 @@ function vlogHTML(log){
   if (!log || !log.length) return '<p class="hint">Không có vi phạm nào.</p>';
   return `<div class="table-wrap vlog"><table><thead><tr><th>Lúc</th><th>Loại</th><th>Thời gian</th><th>Tính vi phạm</th></tr></thead><tbody>${log.map(e => { const c = (VIO[e.t] || {}).count; return `<tr><td>${fmtTimeS(e.at)}</td><td>${esc(vLabel(e))}</td><td>${e.d != null ? fmtDur(e.d) : e.t === 'away' || e.t === 'fs' ? 'chưa quay lại' : '–'}</td><td class="${c ? 'bad' : ''}">${c ? 'Có' : 'Không'}</td></tr>`; }).join('')}</tbody></table></div>`;
 }
-function vioText(){ const x = S.x; const lim = +x.exam.maxViol || 0; return `Vi phạm: ${x.sess.violations}${lim ? '/' + lim : ''}`; }
+function vioText(){ return `Vi phạm: ${S.x.sess.violations}`; }
 function updateVio(){ const v = $('#xvio'); if (v){ v.textContent = vioText(); v.classList.toggle('bad', S.x.sess.violations > 0); } }
 function logV(type){
   const x = S.x; if (S.view !== 'exam' || !x || x.submitting) return null;
@@ -1546,11 +1690,10 @@ function logV(type){
   if (s.vlog.length > 80) s.vlog.splice(0, s.vlog.length - 80);
   if (VIO[type].count){ s.violations = (+s.violations || 0) + 1; updateVio(); }
   saveSess(s); pushSub(true);
-  if (VIO[type].count){ const lim = +x.exam.maxViol || 0; if (lim && s.violations > lim){ finalize(x.exam, s, 'violation'); return null; } }
   return e;
 }
-function limitNote(){ const x = S.x, lim = +x.exam.maxViol || 0, v = x.sess.violations; return lim ? (v >= lim ? ' Lần vi phạm tiếp theo bài sẽ bị tự động nộp.' : ` Vi phạm quá ${lim} lần bài sẽ bị tự động nộp (còn ${lim - v} lần).`) : ' Giáo viên sẽ thấy giờ và thời gian vi phạm.'; }
-function warnVio(text){ if (S.x && !S.x.submitting && !$('.modal-bg')) modal({ title: 'Cảnh báo vi phạm', body: `${text} Số lần vi phạm: ${S.x.sess.violations}${S.x.exam.maxViol ? '/' + S.x.exam.maxViol : ''}.${limitNote()}`, ok: 'Tiếp tục làm bài', cancel: '' }); }
+function limitNote(){ return ' Bài không bị nộp vì lý do này, nhưng giáo viên thấy được giờ và thời gian vi phạm.'; }
+function warnVio(text){ if (S.x && !S.x.submitting && !$('.modal-bg')) modal({ title: 'Cảnh báo vi phạm', body: `${text} Số lần vi phạm: ${S.x.sess.violations}.${limitNote()}`, ok: 'Tiếp tục làm bài', cancel: '' }); }
 function onAway(){
   const x = S.x; if (S.view !== 'exam' || !x || x.away || x.submitting || x.sess.preview) return;
   x.away = true; x.awayAt = Date.now();
@@ -1575,7 +1718,7 @@ function paintFS(){
   const show = S.view === 'exam' && needFS() && !fsEl() && !S.x.submitting;
   o.hidden = !show;
   const m = $('#fs-msg');
-  if (m && show) m.textContent = S.x.fsWasOn ? `Bạn đã thoát toàn màn hình. Số lần vi phạm: ${S.x.sess.violations}${S.x.exam.maxViol ? '/' + S.x.exam.maxViol : ''}.${limitNote()}` : 'Đề này yêu cầu làm bài ở chế độ toàn màn hình. Thoát toàn màn hình hoặc rời trang đều bị tính vi phạm.';
+  if (m && show) m.textContent = S.x.fsWasOn ? `Bạn đã thoát toàn màn hình. Số lần vi phạm: ${S.x.sess.violations}.${limitNote()}` : 'Đề này yêu cầu làm bài ở chế độ toàn màn hình. Thoát toàn màn hình hoặc rời trang đều bị tính vi phạm.';
 }
 async function enterFS(){
   const el = document.documentElement;
@@ -1776,6 +1919,11 @@ async function loadMine(nameArg){
   const name = (nameArg != null ? nameArg : inp ? inp.value : '').trim().replace(/\s+/g, ' ');
   const nk = normName(name);
   if (!nk){ S.h = { name, preview, error: 'Nhập họ tên để xem bài đã làm.' }; paintMine(); if (inp) inp.focus(); return; }
+  if (nameArg == null){
+    await loadRoster(true);
+    if (rosterOn() && !rosterOf(name)){ S.h = { name, preview, error: 'Tên này chưa có trong danh sách lớp. Chọn lại tên trong danh sách.' }; paintMine(); return; }
+    if (!preview){ const pe = pinErr(rosterOf(name), 'h-name'); if (pe){ S.h = { name, preview, error: pe }; paintMine(); return; } }
+  }
   S.h = { name, preview, key: nk, loading: true }; paintMine();
   try {
     const [a, b, pr, sets, progs] = await Promise.all([S.be.list('subs', 'nameKey', nk), S.be.list('subs', 'name', name), S.be.get('practice', nk), S.be.list('psets').catch(() => []), S.be.list('presults', 'nameKey', nk).catch(() => [])]);
@@ -2701,7 +2849,7 @@ async function shuffleExams(){
     maxLogins: Math.max(0, Math.round(+d2.maxLogins || 0)), preventReload: !!d2.preventReload,
     openAt: d2.openAt ? new Date(d2.openAt).getTime() : null, closeAt: d2.closeAt ? new Date(d2.closeAt).getTime() : null,
     showAnswers: !!d2.showAnswers, showScore: !!d2.showScore,
-    maxViol: Math.round(+d2.maxViol || 0), fullscreen: !!d2.fullscreen,
+    maxViol: 0, fullscreen: !!d2.fullscreen,
     scoring: { mc: +sc.mc, sa: +sc.sa, tf: [0, +sc.tf1, +sc.tf2, +sc.tf3, +sc.tf4] }
   };
   const made = [];
@@ -2766,8 +2914,8 @@ document.addEventListener('click', async e => {
   switch (A){
     case 'home': if (S.view === 'exam') return; S.role = null; if (S.h.preview) S.h = { name: '' }; go('home'); break;
     case 'role-teacher': openTeacher(); break;
-    case 'role-student': S.role = 'student'; if (S.h.preview) S.h = { name: '' }; go('student'); break;
-    case 'ttab': stopLive(); S.ttab = el.dataset.k; render(); if (S.ttab !== 'create') loadExams(); if (S.ttab === 'psets') loadPsets(); if (S.ttab === 'bank') loadBank(); break;
+    case 'role-student': loadRoster().then(() => { if (S.view === 'student') render(); }); S.role = 'student'; if (S.h.preview) S.h = { name: '' }; go('student'); break;
+    case 'ttab': stopLive(); S.ttab = el.dataset.k; render(); if (S.ttab !== 'create') loadExams(); if (S.ttab === 'psets') loadPsets(); if (S.ttab === 'bank') loadBank(); if (S.ttab === 'roster') loadRoster(true); break;
     case 'import': doImport(); break;
     case 'q-add': addQ(); break;
     case 'qb-open': toggleQBank(); break;
@@ -2823,6 +2971,13 @@ document.addEventListener('click', async e => {
     case 'ps-start': startSet(el.dataset.id); break;
     case 'ps-enter': enterSetByCode(el.dataset.id); break;
     case 'bank-reload': loadBank(); break;
+    case 'ros-add': rosterAdd(); break;
+    case 'ros-paste': rosterPaste(); break;
+    case 'ros-import': rosterImport(); break;
+    case 'ros-pin-new': rosterNewPin(el.dataset.key); break;
+    case 'ros-xls': rosterExport(); break;
+    case 'ros-edit': rosterEdit(el.dataset.key); break;
+    case 'ros-del': rosterDel(el.dataset.key); break;
     case 'fs-enter': enterFS(); break;
     case 'vlog': showVlog(el.dataset.id); break;
     case 'close-sub': closeSub(el.dataset.id, true); break;
@@ -2869,6 +3024,13 @@ document.addEventListener('change', e => {
   if (t.id === 'bk-open' || t.id === 'bk-close'){ S.bank[t.id === 'bk-open' ? 'open' : 'close'] = t.value; return; }
   if (t.id === 'bk-dur'){ S.bank.dur = t.value; return; }
   if (t.name === 'ps-code'){ const c = $('#ps-count'); if (c) c.textContent = $$('input[name="ps-code"]:checked').length; return; }
+  if (t.id === 'ros-pin'){
+    const miss = t.checked ? S.roster.students.filter(x => !/^\d{4}$/.test(String(x.pin || ''))) : [];
+    miss.forEach(x => { x.pin = newPin(); });
+    rosterSet([...S.roster.students], null, t.checked ? (miss.length ? `Đã bật mã cá nhân và cấp mã cho ${miss.length} em.` : 'Đã bật mã cá nhân.') : 'Đã tắt mã cá nhân.', t.checked);
+    return;
+  }
+  if (t.id === 'ros-on'){ if (t.checked && !S.roster.students.length){ t.checked = false; toast('Thêm học sinh vào danh sách trước đã.', 'err'); return; } rosterSet([...S.roster.students], t.checked, t.checked ? 'Đã bật kiểm tra danh sách.' : 'Đã tắt kiểm tra danh sách.'); return; }
   if (t.id === 'live-auto'){ S.live.auto = t.checked; if (t.checked) autoCloseLate(); return; }
   if (t.id === 'p-only'){ S.h.onlyNew = t.checked; S.h.pick = 'all'; paintMine(); return; }
   if (t.id === 'p-pick'){ S.h.pick = t.value; return; }
@@ -2889,6 +3051,7 @@ document.addEventListener('keydown', e => {
   if (id === 'code'){ e.preventDefault(); checkCode(); }
   else if (id === 'st-name' || id === 'st-cls'){ e.preventDefault(); begin(); }
   else if (id === 'h-name'){ e.preventDefault(); loadMine(); }
+  else if (id === 'ros-name' || id === 'ros-cls'){ e.preventDefault(); rosterAdd(); }
   else if (id === 'ps-name'){ e.preventDefault(); const b = $('[data-act="ps-enter"]'); if (b) enterSetByCode(b.dataset.id); }
 });
 document.addEventListener('mouseover', e => { const c = e.target.closest('.qcol'); if (c && $('#rate-detail')) $('#rate-detail').innerHTML = rateDetail(+c.dataset.i); });
